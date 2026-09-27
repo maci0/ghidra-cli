@@ -741,8 +741,14 @@ fn test_mcp_diff_explain_and_transfer_surface() {
         .args(["--project", TEST_PROJECT, "stop"])
         .output();
 
-    let re_comment = assert_cmd::cargo::cargo_bin_cmd!("ghidra")
-        .args([
+    // These re-reads must survive the bridge being down: the first one
+    // auto-starts a bridge (analyzeHeadless.bat -> cmd.exe -> java.exe) and on
+    // Windows the JVM grandchild inherits ghidra.exe's stdout/stderr handles, so
+    // a piped capture (`output()`/`assert()`) never sees EOF and blocks forever.
+    // `run_cli_capture` writes to files with a bounded wait instead.
+    let (re_comment, re_comment_out, re_comment_err) = common::run_cli_capture(
+        ghidra_bin,
+        &[
             "--project",
             TEST_PROJECT,
             "--program",
@@ -751,19 +757,29 @@ fn test_mcp_diff_explain_and_transfer_surface() {
             "comment",
             "get",
             &dst_addr,
-        ])
-        .output()
-        .expect("comment get program2");
+        ],
+        Duration::from_secs(300),
+    )
+    .expect("comment get program2");
     assert!(
-        re_comment.status.success(),
+        re_comment.success(),
         "comment get failed: {}",
-        String::from_utf8_lossy(&re_comment.stderr)
+        String::from_utf8_lossy(&re_comment_err)
     );
-    let re_c = String::from_utf8_lossy(&re_comment.stdout);
+    let re_c = String::from_utf8_lossy(&re_comment_out);
     let has_comment = re_c.contains(&expect_comment) || re_c.contains("xfer_from:");
 
-    let re_sym = assert_cmd::cargo::cargo_bin_cmd!("ghidra")
-        .args([
+    let sym_filter = format!(
+        "name~{}",
+        expect_label
+            .trim_start_matches("XFER_")
+            .chars()
+            .take(12)
+            .collect::<String>()
+    );
+    let (_re_sym, re_sym_out, _re_sym_err) = common::run_cli_capture(
+        ghidra_bin,
+        &[
             "--project",
             TEST_PROJECT,
             "--program",
@@ -772,19 +788,21 @@ fn test_mcp_diff_explain_and_transfer_surface() {
             "symbol",
             "list",
             "--filter",
-            &format!("name~{}", expect_label.trim_start_matches("XFER_").chars().take(12).collect::<String>()),
+            &sym_filter,
             "--limit",
             "50",
-        ])
-        .output()
-        .expect("symbol list filter");
-    let re_s = String::from_utf8_lossy(&re_sym.stdout);
+        ],
+        Duration::from_secs(300),
+    )
+    .expect("symbol list filter");
+    let re_s = String::from_utf8_lossy(&re_sym_out);
     let has_xfer = re_s.contains("XFER_") || re_s.contains(&expect_label);
 
     // Broader fallback: unfiltered comment get already done; also try symbols without filter
     let re_sym2 = if !has_xfer {
-        let o = assert_cmd::cargo::cargo_bin_cmd!("ghidra")
-            .args([
+        let (_status, out, _err) = common::run_cli_capture(
+            ghidra_bin,
+            &[
                 "--project",
                 TEST_PROJECT,
                 "--program",
@@ -794,10 +812,11 @@ fn test_mcp_diff_explain_and_transfer_surface() {
                 "list",
                 "--limit",
                 "0",
-            ])
-            .output()
-            .expect("symbol list all");
-        String::from_utf8_lossy(&o.stdout).contains("XFER_")
+            ],
+            Duration::from_secs(300),
+        )
+        .expect("symbol list all");
+        String::from_utf8_lossy(&out).contains("XFER_")
     } else {
         true
     };
