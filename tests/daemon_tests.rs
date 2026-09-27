@@ -213,6 +213,9 @@ fn test_mcp_stdio_bridge_tools() {
 
     // cleanup
     drop(stdin);
+    // Never block on cleanup: a stdio server that ignores stdin EOF would
+    // otherwise hang this test (and, behind the serial mutex, the whole binary).
+    let _ = child.kill();
     let _ = child.wait();
 
     drop(harness);
@@ -263,6 +266,9 @@ fn test_mcp_mutation_durability_comment() {
         line.clear();
         reader.read_line(&mut line).unwrap();
         drop(stdin);
+        // Never block on cleanup: a stdio server that ignores stdin EOF would
+        // otherwise hang this test (and, behind the serial mutex, the whole binary).
+        let _ = child.kill();
         let _ = child.wait();
         let rpc: serde_json::Value = serde_json::from_str(line.trim()).expect("rpc");
         let text = rpc["result"]["content"][0]["text"].as_str().expect("text");
@@ -369,6 +375,9 @@ fn test_mcp_summarize_pcode_transaction() {
         line.clear();
         reader.read_line(&mut line).unwrap();
         drop(stdin);
+        // Never block on cleanup: a stdio server that ignores stdin EOF would
+        // otherwise hang this test (and, behind the serial mutex, the whole binary).
+        let _ = child.kill();
         let _ = child.wait();
         let rpc: serde_json::Value = serde_json::from_str(line.trim()).expect("rpc");
         let text = rpc["result"]["content"][0]["text"].as_str().expect("text");
@@ -494,6 +503,9 @@ fn test_mcp_deeper_primitives_and_multiprogram() {
         line.clear();
         reader.read_line(&mut line).unwrap();
         drop(stdin);
+        // Never block on cleanup: a stdio server that ignores stdin EOF would
+        // otherwise hang this test (and, behind the serial mutex, the whole binary).
+        let _ = child.kill();
         let _ = child.wait();
         let rpc: serde_json::Value = serde_json::from_str(line.trim()).expect("rpc");
         let text = rpc["result"]["content"][0]["text"].as_str().expect("text");
@@ -626,6 +638,9 @@ fn test_mcp_diff_explain_and_transfer_surface() {
         line.clear();
         reader.read_line(&mut line).unwrap();
         drop(stdin);
+        // Never block on cleanup: a stdio server that ignores stdin EOF would
+        // otherwise hang this test (and, behind the serial mutex, the whole binary).
+        let _ = child.kill();
         let _ = child.wait();
         let rpc: serde_json::Value = serde_json::from_str(line.trim()).expect("rpc");
         let text = rpc["result"]["content"][0]["text"].as_str().expect("text");
@@ -808,7 +823,11 @@ fn test_mcp_http_launch_and_tools() {
     let mut child = std::process::Command::new(&ghidra_bin)
         .args(["mcp", "http", "--listen", "127.0.0.1:0"])
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        // NOT piped: nothing here drains stderr, and the server logs to stderr.
+        // A full stderr pipe (4 KiB on Windows, 64 KiB on Unix) blocks the server
+        // mid-write, so it stops answering requests and this test blocks on the
+        // socket reads below until the CI step timeout.
+        .stderr(Stdio::null())
         .spawn()
         .expect("spawn mcp http");
 
@@ -847,6 +866,11 @@ fn test_mcp_http_launch_and_tools() {
 
     // ping tool call — envelope keys
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", p)).expect("connect http 2");
+    // Bound the read like the other requests: an unanswered request must fail
+    // the assertions below, not block this test forever.
+    stream
+        .set_read_timeout(Some(Duration::from_secs(30)))
+        .ok();
     let body = br#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}"#;
     let req = format!(
         "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",

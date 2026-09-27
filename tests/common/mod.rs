@@ -225,8 +225,18 @@ pub fn ensure_two_programs(project: &str, primary: &str) -> (String, String) {
     let list_programs = || -> Vec<String> {
         // Always pass --program primary so bridge start does not pick a stale
         // config default (e.g. server.dll) that is missing from the project.
-        let output = std::process::Command::new(ghidra_bin)
-            .args([
+        //
+        // NOTE: this must NOT use `Command::output()`. `program list` auto-starts
+        // the bridge when none is running, i.e. it spawns
+        // analyzeHeadless.bat -> cmd.exe -> java.exe. On Windows the JVM
+        // grandchild inherits ghidra.exe's stdout/stderr handles, so the pipe
+        // never reaches EOF after ghidra.exe exits and `.output()` blocks
+        // forever — the same trap `run_cli_with_timeout` avoids with
+        // `Stdio::null()`. Capture through files (never blocking) and bound the
+        // wait instead.
+        let (status, stdout, stderr) = match run_cli_capture(
+            ghidra_bin,
+            &[
                 "--projects-dir",
                 &projects_dir_str,
                 "--project",
@@ -236,42 +246,41 @@ pub fn ensure_two_programs(project: &str, primary: &str) -> (String, String) {
                 "--json",
                 "program",
                 "list",
-            ])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let v: serde_json::Value =
-                    serde_json::from_slice(&o.stdout).unwrap_or(serde_json::json!([]));
-                // envelope or raw
-                let arr = v
-                    .get("data")
-                    .and_then(|d| d.get("programs"))
-                    .or_else(|| v.get("programs"))
-                    .and_then(|p| p.as_array())
-                    .cloned()
-                    .or_else(|| v.as_array().cloned())
-                    .unwrap_or_default();
-                arr.iter()
-                    .filter_map(|x| {
-                        x.get("name")
-                            .and_then(|n| n.as_str())
-                            .map(|s| s.to_string())
-                    })
-                    .collect()
-            }
-            Ok(o) => {
-                eprintln!(
-                    "program list failed: status={} stderr={}",
-                    o.status,
-                    String::from_utf8_lossy(&o.stderr)
-                );
-                vec![]
-            }
+            ],
+            Duration::from_secs(300),
+        ) {
+            Ok(captured) => captured,
             Err(e) => {
                 eprintln!("program list error: {}", e);
-                vec![]
+                return vec![];
             }
+        };
+        if !status.success() {
+            eprintln!(
+                "program list failed: status={} stderr={}",
+                status,
+                String::from_utf8_lossy(&stderr)
+            );
+            return vec![];
         }
+        let v: serde_json::Value =
+            serde_json::from_slice(&stdout).unwrap_or(serde_json::json!([]));
+        // envelope or raw
+        let arr = v
+            .get("data")
+            .and_then(|d| d.get("programs"))
+            .or_else(|| v.get("programs"))
+            .and_then(|p| p.as_array())
+            .cloned()
+            .or_else(|| v.as_array().cloned())
+            .unwrap_or_default();
+        arr.iter()
+            .filter_map(|x| {
+                x.get("name")
+                    .and_then(|n| n.as_str())
+                    .map(|s| s.to_string())
+            })
+            .collect()
     };
 
     let mut names = list_programs();
@@ -493,6 +502,58 @@ pub fn run_cli_with_timeout(
     }
 }
 
+/// Run a CLI command with a bounded wait, capturing stdout/stderr.
+///
+/// Same Windows constraint as `run_cli_with_timeout`: never give the CLI a pipe
+/// whose EOF depends on a grandchild JVM exiting. Stdout/stderr go to temp files
+/// (file handles never block) and the wait is bounded, so a leaking bridge JVM
+/// cannot hang the test. Returns `(status, stdout, stderr)`.
+pub fn run_cli_capture(
+    bin: &std::path::Path,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)> {
+    use std::process::{Command, Stdio};
+
+    let unique = uuid::Uuid::new_v4();
+    let stdout_path = std::env::temp_dir().join(format!("ghidra-cli-stdout-{}.txt", unique));
+    let stderr_path = std::env::temp_dir().join(format!("ghidra-cli-stderr-{}.txt", unique));
+
+    let mut child = Command::new(bin)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(std::fs::File::create(&stdout_path)?))
+        .stderr(Stdio::from(std::fs::File::create(&stderr_path)?))
+        .spawn()
+        .context("Failed to spawn CLI command")?;
+
+    let start = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    eprintln!("Command timed out after {}s, killing...", timeout.as_secs());
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = std::fs::remove_file(&stdout_path);
+                    let _ = std::fs::remove_file(&stderr_path);
+                    anyhow::bail!("Command timed out after {}s", timeout.as_secs());
+                }
+                std::thread::sleep(Duration::from_secs(1));
+            }
+            Err(e) => anyhow::bail!("Error waiting for command: {}", e),
+        }
+    };
+
+    let stdout = std::fs::read(&stdout_path).unwrap_or_default();
+    let stderr = std::fs::read(&stderr_path).unwrap_or_default();
+    let _ = std::fs::remove_file(&stdout_path);
+    let _ = std::fs::remove_file(&stderr_path);
+
+    Ok((status, stdout, stderr))
+}
+
 /// Require Ghidra to be available for tests to proceed.
 #[macro_export]
 macro_rules! require_ghidra {
@@ -512,4 +573,21 @@ macro_rules! require_ghidra {
             );
         }
     };
+}
+
+// Self-check for the file-backed capture used by `ensure_two_programs`. Runs in
+// every Ghidra-backed test binary, so the file/stdout path is exercised on
+// Windows too (where a piped capture is what hung the suite).
+#[test]
+fn test_run_cli_capture_returns_stdout() {
+    let bin = assert_cmd::cargo::cargo_bin!("ghidra");
+    let (status, stdout, _stderr) = run_cli_capture(bin, &["version"], Duration::from_secs(120))
+        .expect("capture ghidra version");
+    assert!(status.success(), "ghidra version exited with {}", status);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.contains("ghidra-cli"),
+        "capture lost stdout, got: {:?}",
+        text
+    );
 }
