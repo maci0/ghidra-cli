@@ -21,7 +21,7 @@ env:
   GHIDRA_VERSION: 12.0.4_build
 
 jobs:
-  # Job 1: Unit tests and CLI tests (no Ghidra needed) - ~2 min
+  # Job 1: Unit tests (no Ghidra needed) - ~2 min
   unit-and-cli:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -42,9 +42,6 @@ jobs:
       - name: Build
         run: cargo build --verbose
 
-      - name: Build test fixture
-        run: rustc --edition 2021 -o tests/fixtures/sample_binary tests/fixtures/sample_binary.rs
-
       - name: Run unit tests
         run: cargo test --lib --verbose
 
@@ -52,10 +49,9 @@ jobs:
       - name: Run MCP unit tests (no Ghidra)
         run: "cargo test --bin ghidra mcp:: --verbose"
 
-      # e2e's smoke test asserts `ghidra doctor` succeeds, so it needs an installed
-      # Ghidra and runs with the Ghidra-backed jobs below.
-      - name: Run CLI tests
-        run: cargo test --test output_format_integration --verbose
+      # tests/e2e.rs and tests/output_format_integration.rs both assert that
+      # `ghidra doctor` succeeds, so the CLI tests run in the Ghidra-backed
+      # read-only integration job below.
 
   # Job 2: Ghidra setup - installs Ghidra and creates test projects to seed caches.
   # This runs once per OS, then test jobs use the cached artifacts.
@@ -204,7 +200,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run read-only integration tests
-        run: cargo test --test e2e --test readonly_tests --test command_tests --verbose -- --nocapture
+        run: cargo test --test e2e --test output_format_integration --test readonly_tests --test command_tests --verbose -- --nocapture
         timeout-minutes: 80
         env:
           RUST_LOG: info
