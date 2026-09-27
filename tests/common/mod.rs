@@ -263,8 +263,7 @@ pub fn ensure_two_programs(project: &str, primary: &str) -> (String, String) {
             );
             return vec![];
         }
-        let v: serde_json::Value =
-            serde_json::from_slice(&stdout).unwrap_or(serde_json::json!([]));
+        let v: serde_json::Value = serde_json::from_slice(&stdout).unwrap_or(serde_json::json!([]));
         // envelope or raw
         let arr = v
             .get("data")

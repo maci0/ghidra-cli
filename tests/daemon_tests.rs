@@ -868,9 +868,7 @@ fn test_mcp_http_launch_and_tools() {
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", p)).expect("connect http 2");
     // Bound the read like the other requests: an unanswered request must fail
     // the assertions below, not block this test forever.
-    stream
-        .set_read_timeout(Some(Duration::from_secs(30)))
-        .ok();
+    stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
     let body = br#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}"#;
     let req = format!(
         "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
