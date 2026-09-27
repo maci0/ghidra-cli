@@ -43,7 +43,7 @@ jobs:
 
       # MCP adapters live in the binary crate (src/mcp.rs via main.rs), not lib.
       - name: Run MCP unit tests (no Ghidra)
-        run: cargo test --bin ghidra mcp:: --verbose
+        run: "cargo test --bin ghidra mcp:: --verbose"
 
       - name: Run CLI tests
         run: cargo test --test e2e --test output_format_integration --verbose
