@@ -378,7 +378,7 @@ fn dispatch_tool(
             |client| {
                 let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
                 let filter = args.get("filter").and_then(|v| v.as_str()).map(|s| s.to_string());
-                client.list_functions(limit, filter)
+                client.list_functions(limit, filter, &[], false)
             },
             None,
         ),
@@ -1972,7 +1972,7 @@ pub fn build_summarize_report(client: &BridgeClient, focus: &str) -> anyhow::Res
     }
 
     if want_all || focus.contains("function") {
-        if let Ok(funcs) = client.list_functions(Some(15), None) {
+        if let Ok(funcs) = client.list_functions(Some(15), None, &[], false) {
             sections.insert("top_functions".into(), funcs);
         }
         if let Ok(st) = client.stats() {
