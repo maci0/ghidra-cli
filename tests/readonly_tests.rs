@@ -1111,10 +1111,14 @@ fn test_disasm_zero_instructions() {
 
 #[test]
 #[serial]
-fn test_diff_programs() {
+fn test_diff_programs_rejects_self_diff() {
     require_ghidra!();
     harness();
 
+    // `diff programs` compares two different programs (matching a program against
+    // itself is meaningless), so the bridge rejects the same program twice.
+    // The live dual-program happy path is covered by
+    // daemon_tests::test_mcp_diff_explain_and_transfer_surface.
     let result = GhidraCommand::new()
         .arg("diff")
         .arg("programs")
@@ -1124,18 +1128,9 @@ fn test_diff_programs() {
         .arg(TEST_PROJECT)
         .run();
 
-    result.assert_success();
-
-    let output_lower = result.stdout.to_lowercase();
-    assert!(
-        output_lower.contains("identical")
-            || output_lower.contains("0")
-            || result.stdout.trim().is_empty()
-            || output_lower.contains("no diff")
-            || output_lower.contains("same"),
-        "Self-diff should indicate identical/no differences. Got: {}",
-        result.stdout
-    );
+    result
+        .assert_failure()
+        .assert_stderr_contains("must be different programs");
 }
 
 #[test]

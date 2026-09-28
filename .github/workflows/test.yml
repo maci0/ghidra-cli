@@ -5,6 +5,7 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,9 +13,15 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Ghidra 12.1+ releases ship no macOS decompiler natives (the zip contains only
+  # linux_x86_64 and win_x86_64), so every decompile/pcode/diff test fails on
+  # macOS runners with "Decompilation cancelled ... no diagnostic returned by
+  # Ghidra". Pin the newest release that still ships mac_arm_64/mac_x86_64.
+  # Bump this (cache keys follow automatically) when Ghidra ships macOS natives again.
+  GHIDRA_VERSION: 12.0.4_build
 
 jobs:
-  # Job 1: Unit tests and CLI tests (no Ghidra needed) - ~2 min
+  # Job 1: Unit tests (no Ghidra needed) - ~2 min
   unit-and-cli:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -35,14 +42,16 @@ jobs:
       - name: Build
         run: cargo build --verbose
 
-      - name: Build test fixture
-        run: rustc --edition 2021 -o tests/fixtures/sample_binary tests/fixtures/sample_binary.rs
-
       - name: Run unit tests
         run: cargo test --lib --verbose
 
-      - name: Run CLI tests
-        run: cargo test --test e2e --test output_format_integration --verbose
+      # MCP adapters live in the binary crate (src/mcp.rs via main.rs), not lib.
+      - name: Run MCP unit tests (no Ghidra)
+        run: "cargo test --bin ghidra mcp:: --verbose"
+
+      # tests/e2e.rs and tests/output_format_integration.rs both assert that
+      # `ghidra doctor` succeeds, so the CLI tests run in the Ghidra-backed
+      # read-only integration job below.
 
   # Job 2: Ghidra setup - installs Ghidra and creates test projects to seed caches.
   # This runs once per OS, then test jobs use the cached artifacts.
@@ -80,7 +89,7 @@ jobs:
             ~/Library/Preferences/ghidra-cli
             ~/AppData/Local/ghidra-cli
             ~/AppData/Roaming/ghidra-cli
-          key: ghidra-${{ matrix.os }}-v5
+          key: ghidra-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}
 
       - name: Cache Ghidra projects
         id: project-cache
@@ -90,7 +99,7 @@ jobs:
             ~/ghidra-cli-projects
             ~/Library/Caches/ghidra-cli/projects
             ~/AppData/Local/ghidra-cli/projects
-          key: ghidra-projects-${{ matrix.os }}-v6-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
+          key: ghidra-projects-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
 
       - name: Build
         run: cargo build --verbose
@@ -106,7 +115,7 @@ jobs:
             echo "Ghidra already installed (cache hit), skipping setup"
           else
             echo "Ghidra not found, running setup..."
-            cargo run -- setup
+            cargo run -- setup --version "$GHIDRA_VERSION"
           fi
         shell: bash
         env:
@@ -159,7 +168,7 @@ jobs:
             ~/Library/Preferences/ghidra-cli
             ~/AppData/Local/ghidra-cli
             ~/AppData/Roaming/ghidra-cli
-          key: ghidra-${{ matrix.os }}-v5
+          key: ghidra-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}
 
       - name: Restore Ghidra projects
         uses: actions/cache@v4
@@ -168,7 +177,7 @@ jobs:
             ~/ghidra-cli-projects
             ~/Library/Caches/ghidra-cli/projects
             ~/AppData/Local/ghidra-cli/projects
-          key: ghidra-projects-${{ matrix.os }}-v6-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
+          key: ghidra-projects-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
 
       - name: Build
         run: cargo build --verbose
@@ -184,14 +193,14 @@ jobs:
             echo "Ghidra already installed (cache hit)"
           else
             echo "Cache miss, running setup..."
-            cargo run -- setup
+            cargo run -- setup --version "$GHIDRA_VERSION"
           fi
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run read-only integration tests
-        run: cargo test --test readonly_tests --test command_tests --verbose -- --nocapture
+        run: cargo test --test e2e --test output_format_integration --test readonly_tests --test command_tests --verbose -- --nocapture
         timeout-minutes: 80
         env:
           RUST_LOG: info
@@ -232,7 +241,7 @@ jobs:
             ~/Library/Preferences/ghidra-cli
             ~/AppData/Local/ghidra-cli
             ~/AppData/Roaming/ghidra-cli
-          key: ghidra-${{ matrix.os }}-v5
+          key: ghidra-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}
 
       - name: Restore Ghidra projects
         uses: actions/cache@v4
@@ -241,7 +250,7 @@ jobs:
             ~/ghidra-cli-projects
             ~/Library/Caches/ghidra-cli/projects
             ~/AppData/Local/ghidra-cli/projects
-          key: ghidra-projects-${{ matrix.os }}-v6-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
+          key: ghidra-projects-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
 
       - name: Build
         run: cargo build --verbose
@@ -257,7 +266,7 @@ jobs:
             echo "Ghidra already installed (cache hit)"
           else
             echo "Cache miss, running setup..."
-            cargo run -- setup
+            cargo run -- setup --version "$GHIDRA_VERSION"
           fi
         shell: bash
         env:
@@ -305,7 +314,7 @@ jobs:
             ~/Library/Preferences/ghidra-cli
             ~/AppData/Local/ghidra-cli
             ~/AppData/Roaming/ghidra-cli
-          key: ghidra-${{ matrix.os }}-v5
+          key: ghidra-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}
 
       - name: Restore Ghidra projects
         uses: actions/cache@v4
@@ -314,7 +323,7 @@ jobs:
             ~/ghidra-cli-projects
             ~/Library/Caches/ghidra-cli/projects
             ~/AppData/Local/ghidra-cli/projects
-          key: ghidra-projects-${{ matrix.os }}-v6-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
+          key: ghidra-projects-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
 
       - name: Build
         run: cargo build --verbose
@@ -330,7 +339,7 @@ jobs:
             echo "Ghidra already installed (cache hit)"
           else
             echo "Cache miss, running setup..."
-            cargo run -- setup
+            cargo run -- setup --version "$GHIDRA_VERSION"
           fi
         shell: bash
         env:

@@ -10,11 +10,15 @@
 
 use predicates::prelude::*;
 
+#[macro_use]
 mod common;
 
-/// Smoke test - verifies basic CLI commands work
+/// Smoke test - verifies basic CLI commands work.
+/// Requires an installed Ghidra because it asserts `ghidra doctor` succeeds.
 #[test]
 fn test_smoke() {
+    require_ghidra!();
+
     // Version command should always work
     assert_cmd::cargo::cargo_bin_cmd!("ghidra")
         .arg("version")
