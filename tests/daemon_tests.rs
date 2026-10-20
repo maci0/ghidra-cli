@@ -58,23 +58,29 @@ fn test_bridge_launch_preserves_relative_paths() {
         ),
     ] {
         for command in ["start", "ping", "stop"] {
-            assert_cmd::cargo::cargo_bin_cmd!("ghidra")
-                .current_dir(cwd)
-                .env("GHIDRA_INSTALL_DIR", install_arg)
-                .env("GHIDRA_CLI_JAVA_HOME", java_arg)
-                .env_remove("GHIDRA_PROJECT_DIR")
-                .arg("--projects-dir")
-                .arg(projects_arg)
-                .args([
-                    "--project",
-                    TEST_PROJECT,
-                    "--program",
-                    TEST_PROGRAM,
-                    command,
-                ])
-                .timeout(Duration::from_secs(180))
-                .assert()
-                .success();
+            let (status, _, stderr) = common::run_command_capture(
+                std::process::Command::new(assert_cmd::cargo::cargo_bin!("ghidra"))
+                    .current_dir(cwd)
+                    .env("GHIDRA_INSTALL_DIR", install_arg)
+                    .env("GHIDRA_CLI_JAVA_HOME", java_arg)
+                    .env_remove("GHIDRA_PROJECT_DIR")
+                    .arg("--projects-dir")
+                    .arg(projects_arg)
+                    .args([
+                        "--project",
+                        TEST_PROJECT,
+                        "--program",
+                        TEST_PROGRAM,
+                        command,
+                    ]),
+                Duration::from_secs(180),
+            )
+            .expect("bridge lifecycle command");
+            assert!(
+                status.success(),
+                "{command} failed: {}",
+                String::from_utf8_lossy(&stderr)
+            );
         }
     }
 }

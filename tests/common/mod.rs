@@ -529,14 +529,21 @@ pub fn run_cli_capture(
     args: &[&str],
     timeout: Duration,
 ) -> Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)> {
-    use std::process::{Command, Stdio};
+    run_command_capture(std::process::Command::new(bin).args(args), timeout)
+}
+
+/// Capture a configured command without pipes inherited by a background JVM.
+pub fn run_command_capture(
+    command: &mut std::process::Command,
+    timeout: Duration,
+) -> Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)> {
+    use std::process::Stdio;
 
     let unique = uuid::Uuid::new_v4();
     let stdout_path = std::env::temp_dir().join(format!("ghidra-cli-stdout-{}.txt", unique));
     let stderr_path = std::env::temp_dir().join(format!("ghidra-cli-stderr-{}.txt", unique));
 
-    let mut child = Command::new(bin)
-        .args(args)
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::from(std::fs::File::create(&stdout_path)?))
         .stderr(Stdio::from(std::fs::File::create(&stderr_path)?))
