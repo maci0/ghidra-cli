@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  GHIDRA_VERSION: 12.0.4_build
 
 jobs:
   test:
@@ -43,7 +44,7 @@ jobs:
             ~/Library/Preferences/ghidra-cli
             ~/AppData/Local/ghidra-cli
             ~/AppData/Roaming/ghidra-cli
-          key: ghidra-${{ matrix.os }}-v5
+          key: ghidra-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}
 
       - name: Cache Ghidra projects
         uses: actions/cache@v4
@@ -52,7 +53,7 @@ jobs:
             ~/ghidra-cli-projects
             ~/Library/Caches/ghidra-cli/projects
             ~/AppData/Local/ghidra-cli/projects
-          key: ghidra-projects-${{ matrix.os }}-v6-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
+          key: ghidra-projects-${{ matrix.os }}-${{ env.GHIDRA_VERSION }}-${{ hashFiles('tests/fixtures/sample_binary.rs') }}
 
       - name: Build
         run: cargo build --verbose
@@ -68,7 +69,7 @@ jobs:
             echo "Ghidra already installed (cache hit), skipping setup"
           else
             echo "Ghidra not found, running setup..."
-            cargo run -- setup
+            cargo run -- setup --version "$GHIDRA_VERSION"
           fi
         shell: bash
         env:
@@ -82,7 +83,7 @@ jobs:
         timeout-minutes: 20
 
       - name: Run unit tests
-        run: cargo test --lib --verbose
+        run: cargo test --lib --bin ghidra --verbose
 
       - name: Run CLI tests
         run: cargo test --test e2e --test output_format_integration --verbose
@@ -98,7 +99,7 @@ jobs:
         shell: bash
 
       - name: Run mutation integration tests
-        run: cargo test --test comment_tests --test symbol_tests --test patch_tests --test type_tests --test script_tests --verbose -- --nocapture
+        run: cargo test --test comment_tests --test symbol_tests --test patch_tests --test type_tests --test tag_tests --test script_tests --verbose -- --nocapture
         timeout-minutes: 30
         env:
           RUST_LOG: info
@@ -178,15 +179,26 @@ jobs:
         with:
           path: artifacts
 
+      - name: Prepare release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v version="$VERSION" '
+            $0 ~ "^## \\[" version "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md
+
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
           files: artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
+    if: github.repository == 'akiselev/ghidra-cli'
     name: Publish to crates.io
     needs: build
     runs-on: ubuntu-latest

@@ -17,25 +17,8 @@ const TEST_PROGRAM: &str = "sample_binary";
 /// Try to create a DaemonTestHarness. Returns None (and skips the test) if
 /// the bridge fails to start due to "program file(s) not found" - a known
 /// macOS issue where Ghidra can't find the imported program.
-fn try_start_daemon() -> Option<DaemonTestHarness> {
-    match DaemonTestHarness::new(TEST_PROJECT, TEST_PROGRAM) {
-        Ok(h) => Some(h),
-        Err(e) => {
-            let msg = format!("{}", e);
-            if msg.contains("program file(s) not found")
-                || msg.contains("Could not find project")
-                || msg.contains("Path element starting with '.'")
-            {
-                eprintln!(
-                    "Skipping test: bridge/project setup issue (known env/CI constraint): {}",
-                    msg
-                );
-                None
-            } else {
-                panic!("Failed to start daemon: {}", e);
-            }
-        }
-    }
+fn start_daemon() -> DaemonTestHarness {
+    DaemonTestHarness::new(TEST_PROJECT, TEST_PROGRAM).expect("Failed to start bridge")
 }
 
 #[test]
@@ -45,9 +28,7 @@ fn test_daemon_start() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     assert_cmd::cargo::cargo_bin_cmd!("ghidra")
         .arg("status")
@@ -66,9 +47,7 @@ fn test_daemon_status() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     assert_cmd::cargo::cargo_bin_cmd!("ghidra")
         .arg("status")
@@ -88,9 +67,7 @@ fn test_daemon_ping() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     assert_cmd::cargo::cargo_bin_cmd!("ghidra")
         .arg("ping")
@@ -109,9 +86,7 @@ fn test_mcp_stdio_bridge_tools() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     let ghidra_bin = assert_cmd::cargo::cargo_bin!("ghidra");
     let mut child = std::process::Command::new(ghidra_bin)
@@ -139,16 +114,26 @@ fn test_mcp_stdio_bridge_tools() {
     };
 
     // initialize
-    send(&mut stdin, &json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}));
+    send(
+        &mut stdin,
+        &json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+    );
     let _ = recv(&mut reader);
 
     // tools/list
-    send(&mut stdin, &json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
+    send(
+        &mut stdin,
+        &json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
+    );
     let line = recv(&mut reader);
     let rpc: serde_json::Value = serde_json::from_str(line.trim()).expect("parse tools/list");
     let tools = &rpc["result"]["tools"];
-    let names: Vec<_> = tools.as_array().unwrap().iter()
-        .map(|t| t["name"].as_str().unwrap().to_string()).collect();
+    let names: Vec<_> = tools
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
     assert!(names.contains(&"ping".to_string()));
     assert!(names.contains(&"project_list".to_string()));
     assert!(names.contains(&"function_list".to_string()));
@@ -156,7 +141,10 @@ fn test_mcp_stdio_bridge_tools() {
     assert!(names.contains(&"xrefs_to".to_string()));
 
     // project_list
-    send(&mut stdin, &json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"project_list","arguments":{}}}));
+    send(
+        &mut stdin,
+        &json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"project_list","arguments":{}}}),
+    );
     let line = recv(&mut reader);
     let rpc: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
     let text = rpc["result"]["content"][0]["text"].as_str().unwrap();
@@ -167,7 +155,10 @@ fn test_mcp_stdio_bridge_tools() {
     assert!(env.get("next_steps").is_some());
 
     // function_list
-    send(&mut stdin, &json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"function_list","arguments":{"limit":5}}}));
+    send(
+        &mut stdin,
+        &json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"function_list","arguments":{"limit":5}}}),
+    );
     let line = recv(&mut reader);
     let rpc: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
     let text = rpc["result"]["content"][0]["text"].as_str().unwrap();
@@ -179,7 +170,8 @@ fn test_mcp_stdio_bridge_tools() {
     let funcs_val = env["data"].get("functions").cloned().unwrap_or(json!([]));
     let first = funcs_val.as_array().and_then(|a| a.first());
     let target = if let Some(f) = first {
-        f.get("address").and_then(|a| a.as_str())
+        f.get("address")
+            .and_then(|a| a.as_str())
             .or_else(|| f.get("name").and_then(|n| n.as_str()))
             .unwrap_or("main")
     } else {
@@ -187,7 +179,10 @@ fn test_mcp_stdio_bridge_tools() {
     };
 
     // decompile (must include extra context per objective)
-    send(&mut stdin, &json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"decompile","arguments":{"target":target}}}));
+    send(
+        &mut stdin,
+        &json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"decompile","arguments":{"target":target}}}),
+    );
     let line = recv(&mut reader);
     let rpc: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
     let text = rpc["result"]["content"][0]["text"].as_str().unwrap();
@@ -201,8 +196,14 @@ fn test_mcp_stdio_bridge_tools() {
     assert!(data.get("code").is_some() || data.get("signature").is_some());
 
     // xrefs_to
-    let xref_target = data.get("address").and_then(|a| a.as_str()).unwrap_or(target);
-    send(&mut stdin, &json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"xrefs_to","arguments":{"target":xref_target}}}));
+    let xref_target = data
+        .get("address")
+        .and_then(|a| a.as_str())
+        .unwrap_or(target);
+    send(
+        &mut stdin,
+        &json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"xrefs_to","arguments":{"target":xref_target}}}),
+    );
     let line = recv(&mut reader);
     let rpc: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
     let text = rpc["result"]["content"][0]["text"].as_str().unwrap();
@@ -230,9 +231,7 @@ fn test_mcp_mutation_durability_comment() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     let ghidra_bin = assert_cmd::cargo::cargo_bin!("ghidra");
 
@@ -285,11 +284,17 @@ fn test_mcp_mutation_durability_comment() {
         .unwrap_or_default();
     let target = funcs
         .iter()
-        .find_map(|f| f.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+        .find_map(|f| {
+            f.get("name")
+                .and_then(|n| n.as_str())
+                .map(|s| s.to_string())
+        })
         .or_else(|| {
-            funcs
-                .iter()
-                .find_map(|f| f.get("address").and_then(|a| a.as_str()).map(|s| s.to_string()))
+            funcs.iter().find_map(|f| {
+                f.get("address")
+                    .and_then(|a| a.as_str())
+                    .map(|s| s.to_string())
+            })
         })
         .expect("need at least one function for mutation test");
 
@@ -310,10 +315,7 @@ fn test_mcp_mutation_durability_comment() {
     assert!(err_env["provenance"]["timestamp"].is_string());
 
     // Apply rename mutation
-    let set_env = run_mcp_call(
-        "rename_function",
-        json!({"target": target, "name": marker}),
-    );
+    let set_env = run_mcp_call("rename_function", json!({"target": target, "name": marker}));
     assert_eq!(
         set_env["status"], "success",
         "rename_function failed: {}",
@@ -322,7 +324,11 @@ fn test_mcp_mutation_durability_comment() {
 
     // Fresh MCP process: function_list must show the new name (durability invariant)
     let list_env = run_mcp_call("function_list", json!({"limit": 50, "filter": marker}));
-    assert_eq!(list_env["status"], "success", "function_list failed: {}", list_env);
+    assert_eq!(
+        list_env["status"], "success",
+        "function_list failed: {}",
+        list_env
+    );
     let blob = list_env.to_string();
     assert!(
         blob.contains(&marker),
@@ -341,9 +347,7 @@ fn test_mcp_summarize_pcode_transaction() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     let ghidra_bin = assert_cmd::cargo::cargo_bin!("ghidra");
     let run_mcp_call = |tool: &str, args: serde_json::Value| -> serde_json::Value {
@@ -387,9 +391,7 @@ fn test_mcp_summarize_pcode_transaction() {
     // summarize: structured sections + confidence-tagged findings
     let sum = run_mcp_call("summarize", json!({"focus": "all"}));
     assert_eq!(sum["status"], "success", "summarize failed: {}", sum);
-    let findings = sum["data"]["findings"]
-        .as_array()
-        .expect("findings array");
+    let findings = sum["data"]["findings"].as_array().expect("findings array");
     assert!(!findings.is_empty(), "expected at least one finding");
     for f in findings {
         let conf = f["confidence"].as_f64().expect("confidence");
@@ -433,7 +435,11 @@ fn test_mcp_summarize_pcode_transaction() {
 
     // transaction begin → abort (undo boundary)
     let begin = run_mcp_call("transaction_begin", json!({"name": "mcp-test-tx"}));
-    assert_eq!(begin["status"], "success", "transaction_begin failed: {}", begin);
+    assert_eq!(
+        begin["status"], "success",
+        "transaction_begin failed: {}",
+        begin
+    );
     assert!(
         begin["data"].get("transaction_id").is_some()
             || begin["data"].get("status").and_then(|s| s.as_str()) == Some("open"),
@@ -441,7 +447,11 @@ fn test_mcp_summarize_pcode_transaction() {
         begin
     );
     let abort = run_mcp_call("transaction_abort", json!({}));
-    assert_eq!(abort["status"], "success", "transaction_abort failed: {}", abort);
+    assert_eq!(
+        abort["status"], "success",
+        "transaction_abort failed: {}",
+        abort
+    );
 
     // CLI path for pcode --max-ops (regression for clap limit clash)
     assert_cmd::cargo::cargo_bin_cmd!("ghidra")
@@ -469,9 +479,7 @@ fn test_mcp_deeper_primitives_and_multiprogram() {
 
     let (prog_a, prog_b) = ensure_two_programs(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     let ghidra_bin = assert_cmd::cargo::cargo_bin!("ghidra");
     let run_mcp_call = |tool: &str, args: serde_json::Value| -> serde_json::Value {
@@ -604,9 +612,7 @@ fn test_mcp_diff_explain_and_transfer_surface() {
 
     let (prog_a, prog_b) = ensure_two_programs(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     let ghidra_bin = assert_cmd::cargo::cargo_bin!("ghidra");
     let run_mcp_call = |tool: &str, args: serde_json::Value| -> serde_json::Value {
@@ -866,9 +872,7 @@ fn test_mcp_http_launch_and_tools() {
 
     // tools/list via HTTP
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", p)).expect("connect http");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .ok();
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
     let body = br#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
     let req = format!(
         "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -881,7 +885,11 @@ fn test_mcp_http_launch_and_tools() {
     r.read_to_string(&mut resp).ok();
     assert!(resp.contains("HTTP/1.1 200"), "resp={}", resp);
     assert!(resp.contains("\"tools\""), "resp={}", resp);
-    assert!(resp.contains("ping") && resp.contains("patch_bytes"), "resp={}", resp);
+    assert!(
+        resp.contains("ping") && resp.contains("patch_bytes"),
+        "resp={}",
+        resp
+    );
 
     // ping tool call — envelope keys
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", p)).expect("connect http 2");
@@ -907,9 +915,7 @@ fn test_mcp_http_launch_and_tools() {
 
     // Streamable long-job path: progress frames + final envelope
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", p)).expect("connect http stream");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .ok();
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
     let body = br#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ping","arguments":{}}}"#;
     let req = format!(
         "POST /mcp?stream=1 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nAccept: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -920,7 +926,11 @@ fn test_mcp_http_launch_and_tools() {
     let mut resp = String::new();
     let mut r = BufReader::new(stream);
     r.read_to_string(&mut resp).ok();
-    assert!(resp.contains("text/event-stream") || resp.contains("event: progress"), "resp={}", resp);
+    assert!(
+        resp.contains("text/event-stream") || resp.contains("event: progress"),
+        "resp={}",
+        resp
+    );
     assert!(resp.contains("event: progress"), "resp={}", resp);
     assert!(resp.contains("event: result"), "resp={}", resp);
     assert!(
@@ -940,9 +950,7 @@ fn test_daemon_lifecycle() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(_harness) = try_start_daemon() else {
-        return;
-    };
+    let _harness = start_daemon();
 
     assert_cmd::cargo::cargo_bin_cmd!("ghidra")
         .arg("status")
@@ -974,9 +982,7 @@ fn test_daemon_stop() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     assert_cmd::cargo::cargo_bin_cmd!("ghidra")
         .arg("stop")
@@ -1003,9 +1009,7 @@ fn test_daemon_restart() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     // Use run_cli_with_timeout to avoid Windows pipe handle inheritance.
     // `ghidra restart` stops the old bridge and starts a new JVM. With piped
@@ -1047,9 +1051,7 @@ fn test_daemon_start_when_running() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
 
     assert_cmd::cargo::cargo_bin_cmd!("ghidra")
         .arg("start")
@@ -1071,9 +1073,7 @@ fn test_bridge_job_status_is_available_when_idle() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
     let client = harness.client().expect("bridge client");
 
     let status = client.status().expect("bridge status");
@@ -1097,9 +1097,7 @@ fn test_control_plane_stays_responsive_while_program_job_runs() {
 
     ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
 
-    let Some(harness) = try_start_daemon() else {
-        return;
-    };
+    let harness = start_daemon();
     let port = harness.port();
 
     let analysis =

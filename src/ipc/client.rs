@@ -236,7 +236,7 @@ fn describe_queue_summary(status: &serde_json::Value) -> String {
 }
 
 /// Client for communicating with the Ghidra Java bridge.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct BridgeClient {
     port: u16,
     expect_program: Option<String>,

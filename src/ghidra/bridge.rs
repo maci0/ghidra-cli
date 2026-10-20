@@ -1014,6 +1014,31 @@ mod tests {
     }
 
     #[test]
+    fn dispatched_commands_pass_the_bridge_allowlist() {
+        let known = JAVA_BRIDGE_SCRIPT
+            .split("Set<String> KNOWN_COMMANDS")
+            .nth(1)
+            .unwrap()
+            .split("));")
+            .next()
+            .unwrap();
+        let dispatch = JAVA_BRIDGE_SCRIPT
+            .split("private JsonObject dispatchCommand")
+            .nth(1)
+            .unwrap()
+            .split("// --- Response Helpers ---")
+            .next()
+            .unwrap();
+        for case in dispatch.split("case \"").skip(1) {
+            let command = case.split('"').next().unwrap();
+            assert!(
+                known.contains(&format!("\"{command}\"")),
+                "{command} is rejected before dispatch"
+            );
+        }
+    }
+
+    #[test]
     fn shutdown_timeout_defaults_and_supports_unbounded_wait() {
         assert_eq!(
             parse_shutdown_timeout(None),

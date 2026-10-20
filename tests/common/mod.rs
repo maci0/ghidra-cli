@@ -302,7 +302,10 @@ pub fn ensure_two_programs(project: &str, primary: &str) -> (String, String) {
     let mut names = list_programs();
     if names.len() < 2 {
         let binary = fixture_binary();
-        eprintln!("=== Re-importing fixture to create a second program in {:?} ===", project);
+        eprintln!(
+            "=== Re-importing fixture to create a second program in {:?} ===",
+            project
+        );
         let _ = run_cli_with_timeout(
             ghidra_bin,
             &[
@@ -340,10 +343,7 @@ pub fn ensure_two_programs(project: &str, primary: &str) -> (String, String) {
     } else {
         names[0].clone()
     };
-    let b = names
-        .into_iter()
-        .find(|n| n != &a)
-        .expect("second program");
+    let b = names.into_iter().find(|n| n != &a).expect("second program");
     eprintln!("=== Dual programs: {:?} and {:?} ===", a, b);
     (a, b)
 }
@@ -581,7 +581,11 @@ macro_rules! require_ghidra {
 
         let output = String::from_utf8_lossy(&doctor.stdout);
 
-        if !output.contains("OK") || output.contains("NOT FOUND") || output.contains("FAILED") {
+        if !doctor.status.success()
+            || !output.contains("OK")
+            || output.contains("NOT FOUND")
+            || output.contains("FAILED")
+        {
             panic!(
                 "Ghidra not properly installed — tests MUST fail without Ghidra.\n\
                  Doctor output: {}",

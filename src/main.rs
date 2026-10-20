@@ -1332,7 +1332,7 @@ fn execute_via_bridge(
             }
         }
         Commands::Summary(_) => client.program_info(),
-        Commands::Summarize(args) => mcp::build_summarize_report(&client, &args.focus),
+        Commands::Summarize(args) => mcp::build_summarize_report(client, &args.focus),
         Commands::Pcode(args) => {
             let mut payload = json!({"target": args.target});
             if let Some(l) = args.max_ops {
@@ -1361,8 +1361,7 @@ fn execute_via_bridge(
                         .and_then(|v| v.as_array())
                         .cloned()
                         .unwrap_or_default();
-                    let mut df =
-                        extras::assemble_data_flow_from_ops(&ops, args.focus.as_deref());
+                    let mut df = extras::assemble_data_flow_from_ops(&ops, args.focus.as_deref());
                     if let Some(obj) = df.as_object_mut() {
                         obj.insert(
                             "function".into(),
@@ -1431,9 +1430,7 @@ fn execute_via_bridge(
                     for (i, prog) in progs.iter().enumerate() {
                         let _ = client.open_program(prog);
                         let data = match args.tool.as_str() {
-                            "summarize" | "triage" => {
-                                mcp::build_summarize_report(client, "all")?
-                            }
+                            "summarize" | "triage" => mcp::build_summarize_report(client, "all")?,
                             "stats" => client.stats()?,
                             "program_info" | "info" => client.program_info()?,
                             other => {
@@ -1592,10 +1589,7 @@ fn execute_via_bridge(
                             "max_fields": args.max_fields
                         })),
                     )?;
-                    Ok(extras::structure_recover_envelope_data(
-                        &args.address,
-                        raw,
-                    ))
+                    Ok(extras::structure_recover_envelope_data(&args.address, raw))
                 }
             }
         }
@@ -2362,7 +2356,10 @@ fn handle_doctor(projects_dir: &Option<PathBuf>) -> anyhow::Result<()> {
                 Err(e) => {
                     println!("  Error: {}", e);
                     failed = true;
-                    recovery.push(format!("Ghidra client init failed: {}. Try `ghidra setup`.", e));
+                    recovery.push(format!(
+                        "Ghidra client init failed: {}. Try `ghidra setup`.",
+                        e
+                    ));
                 }
             }
         }
@@ -2494,7 +2491,10 @@ fn handle_doctor(projects_dir: &Option<PathBuf>) -> anyhow::Result<()> {
             println!("FAILED");
             println!("  Error: {}", e);
             failed = true;
-            recovery.push(format!("Project dir error: {}. Set --projects-dir or config ghidra_project_dir.", e));
+            recovery.push(format!(
+                "Project dir error: {}. Set --projects-dir or config ghidra_project_dir.",
+                e
+            ));
         }
     }
 

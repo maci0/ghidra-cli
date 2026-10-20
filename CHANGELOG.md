@@ -7,19 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-21
+
 ### Fixed
 
-- **Imported programs are now durably analyzed** — the one-shot project
-  bootstrap (`analyzeHeadless -import`) no longer passes `-noanalysis`. The
-  import previously skipped analysis at launch and relied on the bridge's
-  best-effort `program.save()` after a TCP `analyze`; that save silently
-  swallows failures, so a fresh session saw the imported program as
-  un-analyzed (`analyzed:false`, `function_count:0`) even though import
-  reported "Analysis complete", and `function list`/`decompile` returned
-  nothing. Analyzing inside the one-shot import is persisted by
-  `analyzeHeadless` on exit, so query sessions see the functions.
-Shared-bridge fixes from the 2026-10-15 multi-agent trials (docs/bugs 001, 002,
-004–009). Bridge protocol version 3; the CLI still works with protocol-2 bridges.
+- Keep native MCP tools available with the protocol-3 bridge allowlist and
+  updated decompile client signature.
+- Run the persistent bridge from its data directory so generated files do not
+  pollute the caller's working directory.
+- Align release tests with the CI-pinned Ghidra version, run binary and tag
+  tests, and use curated release notes.
+
+
+Shared-bridge reliability fixes (docs/bugs 001, 002, 004–009). Bridge protocol version 3; the CLI still works with protocol-2 bridges.
 
 ### Added
 
@@ -73,6 +73,19 @@ Shared-bridge fixes from the 2026-10-15 multi-agent trials (docs/bugs 001, 002,
   `default_project`; an explicit `--project` never auto-starts a bridge with
   another project's default program (bug 009).
 
+## [0.3.0] - 2026-09-28
+
+### Fixed
+
+- **Imported programs are now durably analyzed** — the one-shot project
+  bootstrap (`analyzeHeadless -import`) no longer passes `-noanalysis`. The
+  import previously skipped analysis at launch and relied on the bridge's
+  best-effort `program.save()` after a TCP `analyze`; that save silently
+  swallows failures, so a fresh session saw the imported program as
+  un-analyzed (`analyzed:false`, `function_count:0`) even though import
+  reported "Analysis complete", and `function list`/`decompile` returned
+  nothing. Analyzing inside the one-shot import is persisted by
+  `analyzeHeadless` on exit, so query sessions see the functions.
 ## [0.2.2]
 
 ### Added
@@ -275,6 +288,8 @@ Shared-bridge fixes from the 2026-10-15 multi-agent trials (docs/bugs 001, 002,
   running bridge first so the project lock is released. `ghidra project info`
   likewise reports `Exists` based on those artifacts.
 
-[unreleased]: https://github.com/akiselev/ghidra-cli/compare/v0.2.1...HEAD
+[unreleased]: https://github.com/maci0/ghidra-cli/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/maci0/ghidra-cli/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/maci0/ghidra-cli/releases/tag/v0.3.0
 [0.2.1]: https://github.com/akiselev/ghidra-cli/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/akiselev/ghidra-cli/releases/tag/v0.2.0

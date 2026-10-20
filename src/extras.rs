@@ -42,10 +42,7 @@ pub fn sse_result_frame(rpc_response: &Value) -> String {
 
 /// Build a complete non-stub long-job SSE body: interim progress + final envelope.
 /// Used by unit tests and by the HTTP path when stream mode is requested.
-pub fn build_streamed_tool_response(
-    rpc_response: &Value,
-    progress_steps: &[(u8, &str)],
-) -> String {
+pub fn build_streamed_tool_response(rpc_response: &Value, progress_steps: &[(u8, &str)]) -> String {
     let mut body = String::new();
     for (pct, msg) in progress_steps {
         body.push_str(&sse_progress_frame(None, *pct, msg));
@@ -244,7 +241,16 @@ pub fn crypto_similarity_hits(candidates: &[String], known: &[&str], threshold: 
 }
 
 pub const DEFAULT_CRYPTO_TOKENS: &[&str] = &[
-    "aes", "sha256", "sha1", "md5", "rsa", "hmac", "chacha", "poly1305", "curve25519", "secp256",
+    "aes",
+    "sha256",
+    "sha1",
+    "md5",
+    "rsa",
+    "hmac",
+    "chacha",
+    "poly1305",
+    "curve25519",
+    "secp256",
 ];
 
 // ---------------------------------------------------------------------------
@@ -252,10 +258,7 @@ pub const DEFAULT_CRYPTO_TOKENS: &[&str] = &[
 // ---------------------------------------------------------------------------
 
 /// Assemble a structure-recovery suggestion from ordered (offset, size_hint, name_hint) rows.
-pub fn assemble_structure_guess(
-    address: &str,
-    fields: &[(u64, u32, Option<&str>)],
-) -> Value {
+pub fn assemble_structure_guess(address: &str, fields: &[(u64, u32, Option<&str>)]) -> Value {
     let mut field_objs = Vec::new();
     let mut prev_end = 0u64;
     let mut gaps = 0u32;
@@ -327,10 +330,8 @@ pub fn fields_from_bridge_structure_data(data: &Value) -> Vec<(u64, u32, Option<
 /// Elevate bridge structure data through pure scorer (confidence always present).
 pub fn structure_recover_envelope_data(address: &str, bridge_data: Value) -> Value {
     let raw = fields_from_bridge_structure_data(&bridge_data);
-    let tuples: Vec<(u64, u32, Option<&str>)> = raw
-        .iter()
-        .map(|(o, s, n)| (*o, *s, n.as_deref()))
-        .collect();
+    let tuples: Vec<(u64, u32, Option<&str>)> =
+        raw.iter().map(|(o, s, n)| (*o, *s, n.as_deref())).collect();
     let mut scored = assemble_structure_guess(address, &tuples);
     // Preserve any bridge-only keys
     if let Some(obj) = scored.as_object_mut() {
@@ -394,7 +395,10 @@ mod tests {
                 "content": [{"type": "text", "text": "{\"status\":\"success\",\"provenance\":{},\"next_steps\":[],\"recovery_suggestions\":[]}"}]
             }
         });
-        let body = build_streamed_tool_response(&final_rpc, &[(10, "queued"), (50, "running"), (100, "done")]);
+        let body = build_streamed_tool_response(
+            &final_rpc,
+            &[(10, "queued"), (50, "running"), (100, "done")],
+        );
         assert!(body.contains("event: progress"));
         assert!(body.contains("event: result"));
         assert!(body.contains("mcp_progress"));
@@ -456,7 +460,11 @@ mod tests {
     fn structure_guess_includes_confidence_and_fields() {
         let g = assemble_structure_guess(
             "0x401000",
-            &[(0, 4, Some("len")), (4, 8, Some("ptr")), (12, 4, Some("flags"))],
+            &[
+                (0, 4, Some("len")),
+                (4, 8, Some("ptr")),
+                (12, 4, Some("flags")),
+            ],
         );
         assert_eq!(g["fields"].as_array().unwrap().len(), 3);
         let c = g["confidence"].as_f64().unwrap();

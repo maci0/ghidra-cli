@@ -5,10 +5,10 @@
 
 class GhidraCli < Formula
   desc "Rust CLI for Ghidra headless reverse engineering and native MCP tools"
-  homepage "https://github.com/akiselev/ghidra-cli"
-  url "https://github.com/akiselev/ghidra-cli.git", tag: "v0.2.1"
+  homepage "https://github.com/maci0/ghidra-cli"
+  url "https://github.com/maci0/ghidra-cli.git", tag: "v0.4.0"
   license "GPL-3.0-only"
-  head "https://github.com/akiselev/ghidra-cli.git", branch: "master"
+  head "https://github.com/maci0/ghidra-cli.git", branch: "main"
 
   depends_on "rust" => :build
   # Runtime: Ghidra + full JDK 21+ (install separately or via `ghidra setup`)

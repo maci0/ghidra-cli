@@ -260,7 +260,12 @@ fn handle_request(
 
     match method {
         "initialize" => {
-            let caps = build_server_capabilities(cached_client, default_project.clone(), default_program.clone(), projects_dir.clone());
+            let caps = build_server_capabilities(
+                cached_client,
+                default_project.clone(),
+                default_program.clone(),
+                projects_dir.clone(),
+            );
             json!({
                 "jsonrpc": jsonrpc,
                 "id": id,
@@ -350,18 +355,21 @@ fn dispatch_tool(
                 default_program.clone(),
                 projects_dir.clone(),
             ) {
-                Ok((client, proj_name)) => {
-                    match client.send_command("list_programs", None) {
-                        Ok(data) => {
-                            let ns = compute_next_steps("project_list", None);
-                            wrap_envelope_as_content(
-                                make_envelope("project_list", data, Some(&proj_name), None, ns, None),
-                                id,
-                            )
-                        }
-                        Err(e) => tool_error(id, "project_list", &e.to_string(), recovery_for("project_list", &e.to_string())),
+                Ok((client, proj_name)) => match client.send_command("list_programs", None) {
+                    Ok(data) => {
+                        let ns = compute_next_steps("project_list", None);
+                        wrap_envelope_as_content(
+                            make_envelope("project_list", data, Some(&proj_name), None, ns, None),
+                            id,
+                        )
                     }
-                }
+                    Err(e) => tool_error(
+                        id,
+                        "project_list",
+                        &e.to_string(),
+                        recovery_for("project_list", &e.to_string()),
+                    ),
+                },
                 Err(_e) => {
                     let data = list_local_projects(projects_dir.clone());
                     let ns = compute_next_steps("project_list", None);
@@ -374,10 +382,22 @@ fn dispatch_tool(
         }
 
         "function_list" => bridge_tool(
-            id, "function_list", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "function_list",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| {
-                let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
-                let filter = args.get("filter").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize);
+                let filter = args
+                    .get("filter")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
                 client.list_functions(limit, filter, &[], false)
             },
             None,
@@ -398,10 +418,19 @@ fn dispatch_tool(
                 );
             }
             let max_xrefs = args.get("max_xrefs").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
-            let caller_depth = args.get("caller_depth").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
+            let caller_depth = args
+                .get("caller_depth")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(2) as usize;
             let target_owned = target.to_string();
             bridge_tool(
-                id, "decompile", cached_client, default_project, default_program, projects_dir, false,
+                id,
+                "decompile",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| enrich_decompile(client, &target_owned, max_xrefs, caller_depth),
                 Some(target),
             )
@@ -410,12 +439,23 @@ fn dispatch_tool(
         "xrefs_to" | "xrefs_from" => {
             let target = args.get("target").and_then(|v| v.as_str()).unwrap_or("");
             if target.is_empty() {
-                return tool_error(id, name, "target required", recovery_for(name, "target required"));
+                return tool_error(
+                    id,
+                    name,
+                    "target required",
+                    recovery_for(name, "target required"),
+                );
             }
             let t = target.to_string();
             let cmd = name.to_string();
             bridge_tool(
-                id, name, cached_client, default_project, default_program, projects_dir, false,
+                id,
+                name,
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| {
                     if cmd == "xrefs_to" {
                         client.xrefs_to(t)
@@ -428,19 +468,40 @@ fn dispatch_tool(
         }
 
         "strings_list" => bridge_tool(
-            id, "strings_list", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "strings_list",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| {
-                let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
-                let filter = args.get("filter").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize);
+                let filter = args
+                    .get("filter")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
                 client.list_strings(limit, filter)
             },
             None,
         ),
 
         "symbols_list" => bridge_tool(
-            id, "symbols_list", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "symbols_list",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| {
-                let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize);
                 let filter = args.get("filter").and_then(|v| v.as_str());
                 client.symbol_list(limit, filter)
             },
@@ -448,15 +509,30 @@ fn dispatch_tool(
         ),
 
         "memory_map" => bridge_tool(
-            id, "memory_map", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "memory_map",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| client.memory_map(),
             None,
         ),
 
         "types_list" => bridge_tool(
-            id, "types_list", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "types_list",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| {
-                let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize);
                 let filter = args.get("filter").and_then(|v| v.as_str());
                 client.type_list(limit, filter)
             },
@@ -464,9 +540,18 @@ fn dispatch_tool(
         ),
 
         "comments_list" => bridge_tool(
-            id, "comments_list", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "comments_list",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| {
-                let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize);
                 let filter = args.get("filter").and_then(|v| v.as_str());
                 client.comment_list(limit, filter)
             },
@@ -476,7 +561,13 @@ fn dispatch_tool(
         "find_string" => require_str_then(id, name, args, "pattern", |id, pat| {
             let p = pat.to_string();
             bridge_tool(
-                id, name, cached_client, default_project, default_program, projects_dir, false,
+                id,
+                name,
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| client.find_string(&p),
                 Some(pat),
             )
@@ -484,7 +575,13 @@ fn dispatch_tool(
         "find_bytes" => require_str_then(id, name, args, "hex", |id, hex| {
             let h = hex.to_string();
             bridge_tool(
-                id, name, cached_client, default_project, default_program, projects_dir, false,
+                id,
+                name,
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| client.find_bytes(&h),
                 Some(hex),
             )
@@ -492,7 +589,13 @@ fn dispatch_tool(
         "find_function" => require_str_then(id, name, args, "pattern", |id, pat| {
             let p = pat.to_string();
             bridge_tool(
-                id, name, cached_client, default_project, default_program, projects_dir, false,
+                id,
+                name,
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| client.find_function(&p),
                 Some(pat),
             )
@@ -500,26 +603,53 @@ fn dispatch_tool(
         "find_calls" => require_str_then(id, name, args, "function", |id, func| {
             let f = func.to_string();
             bridge_tool(
-                id, name, cached_client, default_project, default_program, projects_dir, false,
+                id,
+                name,
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| client.find_calls(&f),
                 Some(func),
             )
         }),
         "find_crypto" => bridge_tool(
-            id, "find_crypto", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "find_crypto",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| client.find_crypto(),
             None,
         ),
         "find_interesting" => bridge_tool(
-            id, "find_interesting", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "find_interesting",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| client.find_interesting(),
             None,
         ),
 
         "graph_calls" => bridge_tool(
-            id, "graph_calls", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "graph_calls",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| {
-                let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize);
                 client.graph_calls(limit)
             },
             None,
@@ -527,13 +657,27 @@ fn dispatch_tool(
         "graph_callers" | "graph_callees" => {
             let function = args.get("function").and_then(|v| v.as_str()).unwrap_or("");
             if function.is_empty() {
-                return tool_error(id, name, "function required", recovery_for(name, "function required"));
+                return tool_error(
+                    id,
+                    name,
+                    "function required",
+                    recovery_for(name, "function required"),
+                );
             }
-            let depth = args.get("depth").and_then(|v| v.as_u64()).map(|n| n as usize);
+            let depth = args
+                .get("depth")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
             let f = function.to_string();
             let cmd = name.to_string();
             bridge_tool(
-                id, name, cached_client, default_project, default_program, projects_dir, false,
+                id,
+                name,
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| {
                     if cmd == "graph_callers" {
                         client.graph_callers(&f, depth)
@@ -546,7 +690,13 @@ fn dispatch_tool(
         }
 
         "script_list" => bridge_tool(
-            id, "script_list", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "script_list",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| client.script_list(),
             None,
         ),
@@ -554,19 +704,31 @@ fn dispatch_tool(
         "script_run" => {
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
             if path.is_empty() {
-                return tool_error(id, "script_run", "path required", recovery_for("script_run", "path required"));
+                return tool_error(
+                    id,
+                    "script_run",
+                    "path required",
+                    recovery_for("script_run", "path required"),
+                );
             }
             let script_args: Vec<String> = args
                 .get("args")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
                 .unwrap_or_default();
             let expect: Vec<Value> = args
                 .get("expect")
                 .and_then(|v| v.as_array())
                 .cloned()
                 .unwrap_or_default();
-            let allow_empty = args.get("allow_empty").and_then(|v| v.as_bool()).unwrap_or(false);
+            let allow_empty = args
+                .get("allow_empty")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let path_owned = path.to_string();
             match get_bridge_client(
                 cached_client,
@@ -610,12 +772,26 @@ fn dispatch_tool(
         "disasm" => {
             let target = args.get("target").and_then(|v| v.as_str()).unwrap_or("");
             if target.is_empty() {
-                return tool_error(id, "disasm", "target required", recovery_for("disasm", "target required"));
+                return tool_error(
+                    id,
+                    "disasm",
+                    "target required",
+                    recovery_for("disasm", "target required"),
+                );
             }
-            let count = args.get("count").and_then(|v| v.as_u64()).map(|n| n as usize);
+            let count = args
+                .get("count")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
             let t = target.to_string();
             bridge_tool(
-                id, "disasm", cached_client, default_project, default_program, projects_dir, false,
+                id,
+                "disasm",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| client.disasm(&t, count),
                 Some(target),
             )
@@ -639,7 +815,12 @@ fn dispatch_tool(
                     ),
                     id,
                 ),
-                Err(e) => tool_error(id, "list_imports", &e.to_string(), recovery_for("list_imports", &e.to_string())),
+                Err(e) => tool_error(
+                    id,
+                    "list_imports",
+                    &e.to_string(),
+                    recovery_for("list_imports", &e.to_string()),
+                ),
             },
             Err(_e) => wrap_envelope_as_content(
                 make_envelope(
@@ -655,12 +836,24 @@ fn dispatch_tool(
         },
 
         "list_exports" => bridge_tool(
-            id, "list_exports", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "list_exports",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| client.list_exports(),
             None,
         ),
         "program_info" => bridge_tool(
-            id, "program_info", cached_client, default_project, default_program, projects_dir, false,
+            id,
+            "program_info",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            false,
             |client| client.program_info(),
             None,
         ),
@@ -682,7 +875,12 @@ fn dispatch_tool(
                     ),
                     id,
                 ),
-                Err(e) => tool_error(id, "stats", &e.to_string(), recovery_for("stats", &e.to_string())),
+                Err(e) => tool_error(
+                    id,
+                    "stats",
+                    &e.to_string(),
+                    recovery_for("stats", &e.to_string()),
+                ),
             },
             Err(_e) => wrap_envelope_as_content(
                 make_envelope(
@@ -712,7 +910,13 @@ fn dispatch_tool(
             let a = address.to_string();
             let h = hex.to_string();
             bridge_tool(
-                id, "patch_bytes", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "patch_bytes",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.patch_bytes(&a, &h),
                 Some(address),
             )
@@ -720,12 +924,26 @@ fn dispatch_tool(
         "patch_nop" => {
             let address = args.get("address").and_then(|v| v.as_str()).unwrap_or("");
             if address.is_empty() {
-                return tool_error(id, "patch_nop", "address required", recovery_for("patch_nop", "address required"));
+                return tool_error(
+                    id,
+                    "patch_nop",
+                    "address required",
+                    recovery_for("patch_nop", "address required"),
+                );
             }
-            let count = args.get("count").and_then(|v| v.as_u64()).map(|n| n as usize);
+            let count = args
+                .get("count")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
             let a = address.to_string();
             bridge_tool(
-                id, "patch_nop", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "patch_nop",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.patch_nop(&a, count),
                 Some(address),
             )
@@ -733,11 +951,22 @@ fn dispatch_tool(
         "patch_export" => {
             let output = args.get("output").and_then(|v| v.as_str()).unwrap_or("");
             if output.is_empty() {
-                return tool_error(id, "patch_export", "output required", recovery_for("patch_export", "output required"));
+                return tool_error(
+                    id,
+                    "patch_export",
+                    "output required",
+                    recovery_for("patch_export", "output required"),
+                );
             }
             let o = output.to_string();
             bridge_tool(
-                id, "patch_export", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "patch_export",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.patch_export(&o),
                 Some(output),
             )
@@ -745,12 +974,26 @@ fn dispatch_tool(
         "create_function" => {
             let address = args.get("address").and_then(|v| v.as_str()).unwrap_or("");
             if address.is_empty() {
-                return tool_error(id, "create_function", "address required", recovery_for("create_function", "address required"));
+                return tool_error(
+                    id,
+                    "create_function",
+                    "address required",
+                    recovery_for("create_function", "address required"),
+                );
             }
-            let name_opt = args.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let name_opt = args
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let a = address.to_string();
             bridge_tool(
-                id, "create_function", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "create_function",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| {
                     let payload = if let Some(n) = name_opt {
                         json!({"address": a, "name": n})
@@ -785,7 +1028,13 @@ fn dispatch_tool(
             let t = target.to_string();
             let n = new_name.to_string();
             bridge_tool(
-                id, "rename_function", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "rename_function",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| {
                     client.send_command(
                         "rename_function",
@@ -811,7 +1060,13 @@ fn dispatch_tool(
             }
             let t = target.to_string();
             bridge_tool(
-                id, "delete_function", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "delete_function",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 // Bridge reads "address" (name-or-address string).
                 move |client| client.send_command("delete_function", Some(json!({"address": t}))),
                 Some(target),
@@ -821,13 +1076,29 @@ fn dispatch_tool(
             let target = args.get("target").and_then(|v| v.as_str()).unwrap_or("");
             let sig = args.get("signature").and_then(|v| v.as_str()).unwrap_or("");
             if target.is_empty() || sig.is_empty() {
-                return tool_error(id, "function_set_signature", "target and signature required", recovery_for("function_set_signature", "missing fields"));
+                return tool_error(
+                    id,
+                    "function_set_signature",
+                    "target and signature required",
+                    recovery_for("function_set_signature", "missing fields"),
+                );
             }
             let t = target.to_string();
             let s = sig.to_string();
             bridge_tool(
-                id, "function_set_signature", cached_client, default_project, default_program, projects_dir, true,
-                move |client| client.send_command("function_set_signature", Some(json!({"target": t, "signature": s}))),
+                id,
+                "function_set_signature",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
+                move |client| {
+                    client.send_command(
+                        "function_set_signature",
+                        Some(json!({"target": t, "signature": s})),
+                    )
+                },
                 Some(target),
             )
         }
@@ -849,7 +1120,13 @@ fn dispatch_tool(
             let t = target.to_string();
             let ty = ty.to_string();
             bridge_tool(
-                id, "function_set_return_type", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "function_set_return_type",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| {
                     client.send_command(
                         "function_set_return_type",
@@ -861,15 +1138,34 @@ fn dispatch_tool(
         }
         "function_set_calling_convention" => {
             let target = args.get("target").and_then(|v| v.as_str()).unwrap_or("");
-            let conv = args.get("convention").and_then(|v| v.as_str()).unwrap_or("");
+            let conv = args
+                .get("convention")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if target.is_empty() || conv.is_empty() {
-                return tool_error(id, "function_set_calling_convention", "target and convention required", recovery_for("function_set_calling_convention", "missing fields"));
+                return tool_error(
+                    id,
+                    "function_set_calling_convention",
+                    "target and convention required",
+                    recovery_for("function_set_calling_convention", "missing fields"),
+                );
             }
             let t = target.to_string();
             let c = conv.to_string();
             bridge_tool(
-                id, "function_set_calling_convention", cached_client, default_project, default_program, projects_dir, true,
-                move |client| client.send_command("function_set_calling_convention", Some(json!({"target": t, "convention": c}))),
+                id,
+                "function_set_calling_convention",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
+                move |client| {
+                    client.send_command(
+                        "function_set_calling_convention",
+                        Some(json!({"target": t, "convention": c})),
+                    )
+                },
                 Some(target),
             )
         }
@@ -899,7 +1195,13 @@ fn dispatch_tool(
                 "type_name": ty
             });
             bridge_tool(
-                id, "set_var_type", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "set_var_type",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.send_command("set_var_type", Some(payload)),
                 Some(function),
             )
@@ -908,12 +1210,23 @@ fn dispatch_tool(
             let address = args.get("address").and_then(|v| v.as_str()).unwrap_or("");
             let sym = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
             if address.is_empty() || sym.is_empty() {
-                return tool_error(id, "symbol_create", "address and name required", recovery_for("symbol_create", "missing fields"));
+                return tool_error(
+                    id,
+                    "symbol_create",
+                    "address and name required",
+                    recovery_for("symbol_create", "missing fields"),
+                );
             }
             let a = address.to_string();
             let n = sym.to_string();
             bridge_tool(
-                id, "symbol_create", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "symbol_create",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.symbol_create(&a, &n),
                 Some(address),
             )
@@ -921,11 +1234,22 @@ fn dispatch_tool(
         "symbol_delete" => {
             let sym = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
             if sym.is_empty() {
-                return tool_error(id, "symbol_delete", "name required", recovery_for("symbol_delete", "name required"));
+                return tool_error(
+                    id,
+                    "symbol_delete",
+                    "name required",
+                    recovery_for("symbol_delete", "name required"),
+                );
             }
             let n = sym.to_string();
             bridge_tool(
-                id, "symbol_delete", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "symbol_delete",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.symbol_delete(&n),
                 Some(sym),
             )
@@ -934,12 +1258,23 @@ fn dispatch_tool(
             let old_name = args.get("old_name").and_then(|v| v.as_str()).unwrap_or("");
             let new_name = args.get("new_name").and_then(|v| v.as_str()).unwrap_or("");
             if old_name.is_empty() || new_name.is_empty() {
-                return tool_error(id, "symbol_rename", "old_name and new_name required", recovery_for("symbol_rename", "missing fields"));
+                return tool_error(
+                    id,
+                    "symbol_rename",
+                    "old_name and new_name required",
+                    recovery_for("symbol_rename", "missing fields"),
+                );
             }
             let o = old_name.to_string();
             let n = new_name.to_string();
             bridge_tool(
-                id, "symbol_rename", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "symbol_rename",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.symbol_rename(&o, &n),
                 Some(old_name),
             )
@@ -948,14 +1283,25 @@ fn dispatch_tool(
             let address = args.get("address").and_then(|v| v.as_str()).unwrap_or("");
             let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
             if address.is_empty() || text.is_empty() {
-                return tool_error(id, "comment_set", "address and text required", recovery_for("comment_set", "missing fields"));
+                return tool_error(
+                    id,
+                    "comment_set",
+                    "address and text required",
+                    recovery_for("comment_set", "missing fields"),
+                );
             }
             let ct = args.get("comment_type").and_then(|v| v.as_str());
             let a = address.to_string();
             let t = text.to_string();
             let ct_owned = ct.map(|s| s.to_string());
             bridge_tool(
-                id, "comment_set", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "comment_set",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.comment_set(&a, &t, ct_owned.as_deref()),
                 Some(address),
             )
@@ -963,23 +1309,48 @@ fn dispatch_tool(
         "comment_delete" => {
             let address = args.get("address").and_then(|v| v.as_str()).unwrap_or("");
             if address.is_empty() {
-                return tool_error(id, "comment_delete", "address required", recovery_for("comment_delete", "address required"));
+                return tool_error(
+                    id,
+                    "comment_delete",
+                    "address required",
+                    recovery_for("comment_delete", "address required"),
+                );
             }
             let a = address.to_string();
             bridge_tool(
-                id, "comment_delete", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "comment_delete",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.comment_delete(&a),
                 Some(address),
             )
         }
         "type_create" => {
-            let definition = args.get("definition").and_then(|v| v.as_str()).unwrap_or("");
+            let definition = args
+                .get("definition")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if definition.is_empty() {
-                return tool_error(id, "type_create", "definition required", recovery_for("type_create", "definition required"));
+                return tool_error(
+                    id,
+                    "type_create",
+                    "definition required",
+                    recovery_for("type_create", "definition required"),
+                );
             }
             let d = definition.to_string();
             bridge_tool(
-                id, "type_create", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "type_create",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.type_create(&d),
                 None,
             )
@@ -988,29 +1359,42 @@ fn dispatch_tool(
             let address = args.get("address").and_then(|v| v.as_str()).unwrap_or("");
             let type_name = args.get("type_name").and_then(|v| v.as_str()).unwrap_or("");
             if address.is_empty() || type_name.is_empty() {
-                return tool_error(id, "type_apply", "address and type_name required", recovery_for("type_apply", "missing fields"));
+                return tool_error(
+                    id,
+                    "type_apply",
+                    "address and type_name required",
+                    recovery_for("type_apply", "missing fields"),
+                );
             }
             let a = address.to_string();
             let t = type_name.to_string();
             bridge_tool(
-                id, "type_apply", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "type_apply",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.type_apply(&a, &t),
                 Some(address),
             )
         }
-        "type_delete" | "type_rename" | "type_create_enum" | "type_typedef" | "type_add_field" | "type_del_field" => {
+        "type_delete" | "type_rename" | "type_create_enum" | "type_typedef" | "type_add_field"
+        | "type_del_field" => {
             let payload = normalize_type_mutation_args(name, args);
             if let Some(err) = payload.get("__error").and_then(|e| e.as_str()) {
-                return tool_error(
-                    id,
-                    name,
-                    err,
-                    recovery_for(name, err),
-                );
+                return tool_error(id, name, err, recovery_for(name, err));
             }
             let cmd = name.to_string();
             bridge_tool(
-                id, name, cached_client, default_project, default_program, projects_dir, true,
+                id,
+                name,
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.send_command(&cmd, Some(payload)),
                 None,
             )
@@ -1081,12 +1465,23 @@ fn dispatch_tool(
             let p1 = args.get("program1").and_then(|v| v.as_str()).unwrap_or("");
             let p2 = args.get("program2").and_then(|v| v.as_str()).unwrap_or("");
             if p1.is_empty() || p2.is_empty() {
-                return tool_error(id, "diff_programs", "program1 and program2 required", recovery_for("diff_programs", "missing fields"));
+                return tool_error(
+                    id,
+                    "diff_programs",
+                    "program1 and program2 required",
+                    recovery_for("diff_programs", "missing fields"),
+                );
             }
             let a = p1.to_string();
             let b = p2.to_string();
             bridge_tool(
-                id, "diff_programs", cached_client, default_project, default_program, projects_dir, false,
+                id,
+                "diff_programs",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| client.diff_programs(&a, &b),
                 None,
             )
@@ -1095,12 +1490,23 @@ fn dispatch_tool(
             let f1 = args.get("func1").and_then(|v| v.as_str()).unwrap_or("");
             let f2 = args.get("func2").and_then(|v| v.as_str()).unwrap_or("");
             if f1.is_empty() || f2.is_empty() {
-                return tool_error(id, "diff_functions", "func1 and func2 required", recovery_for("diff_functions", "missing fields"));
+                return tool_error(
+                    id,
+                    "diff_functions",
+                    "func1 and func2 required",
+                    recovery_for("diff_functions", "missing fields"),
+                );
             }
             let a = f1.to_string();
             let b = f2.to_string();
             bridge_tool(
-                id, "diff_functions", cached_client, default_project, default_program, projects_dir, false,
+                id,
+                "diff_functions",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| client.diff_functions(&a, &b),
                 None,
             )
@@ -1118,8 +1524,14 @@ fn dispatch_tool(
                 );
             }
             let labels = args.get("labels").and_then(|v| v.as_bool()).unwrap_or(true);
-            let comments = args.get("comments").and_then(|v| v.as_bool()).unwrap_or(true);
-            let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
+            let comments = args
+                .get("comments")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let limit = args
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
             let a = p1.to_string();
             let b = p2.to_string();
             bridge_tool(
@@ -1228,7 +1640,12 @@ fn dispatch_tool(
                         ),
                         id,
                     ),
-                    Err(e) => tool_error(id, "summarize", &e.to_string(), recovery_for("summarize", &e.to_string())),
+                    Err(e) => tool_error(
+                        id,
+                        "summarize",
+                        &e.to_string(),
+                        recovery_for("summarize", &e.to_string()),
+                    ),
                 },
                 Err(e) => tool_error(
                     id,
@@ -1242,12 +1659,26 @@ fn dispatch_tool(
         "pcode" => {
             let target = args.get("target").and_then(|v| v.as_str()).unwrap_or("");
             if target.is_empty() {
-                return tool_error(id, "pcode", "target required", recovery_for("pcode", "target required"));
+                return tool_error(
+                    id,
+                    "pcode",
+                    "target required",
+                    recovery_for("pcode", "target required"),
+                );
             }
-            let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
+            let limit = args
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
             let t = target.to_string();
             bridge_tool(
-                id, "pcode", cached_client, default_project, default_program, projects_dir, false,
+                id,
+                "pcode",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                false,
                 move |client| {
                     let mut payload = json!({"target": t});
                     if let Some(l) = limit {
@@ -1273,7 +1704,10 @@ fn dispatch_tool(
                 .get("focus")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize);
+            let limit = args
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
             let t = target.to_string();
             match get_bridge_client(
                 cached_client,
@@ -1304,12 +1738,13 @@ fn dispatch_tool(
                                         .and_then(|v| v.as_array())
                                         .cloned()
                                         .unwrap_or_default();
-                                    let mut df = assemble_data_flow_from_ops(
-                                        &ops,
-                                        focus.as_deref(),
-                                    );
+                                    let mut df =
+                                        assemble_data_flow_from_ops(&ops, focus.as_deref());
                                     if let Some(obj) = df.as_object_mut() {
-                                        obj.insert("function".into(), pc.get("function").cloned().unwrap_or(json!(target)));
+                                        obj.insert(
+                                            "function".into(),
+                                            pc.get("function").cloned().unwrap_or(json!(target)),
+                                        );
                                         obj.insert("source".into(), json!("pcode_fallback"));
                                     }
                                     df
@@ -1326,12 +1761,7 @@ fn dispatch_tool(
                         }
                     };
                     if let Some(err) = data.get("error").and_then(|e| e.as_str()) {
-                        return tool_error(
-                            id,
-                            "data_flow",
-                            err,
-                            recovery_for("data_flow", err),
-                        );
+                        return tool_error(id, "data_flow", err, recovery_for("data_flow", err));
                     }
                     wrap_envelope_as_content(
                         make_envelope(
@@ -1429,10 +1859,7 @@ fn dispatch_tool(
                 .get("threshold")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.72);
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(25) as usize;
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(25) as usize;
             match get_bridge_client(
                 cached_client,
                 default_project.clone(),
@@ -1484,10 +1911,8 @@ fn dispatch_tool(
                         if let Ok(slist) = client.list_strings(Some(40), None) {
                             if let Some(arr) = slist.get("strings").and_then(|v| v.as_array()) {
                                 for s in arr {
-                                    if let Some(v) = s
-                                        .get("value")
-                                        .or(s.get("string"))
-                                        .and_then(|x| x.as_str())
+                                    if let Some(v) =
+                                        s.get("value").or(s.get("string")).and_then(|x| x.as_str())
                                     {
                                         candidates.push(v.to_string());
                                     }
@@ -1547,7 +1972,10 @@ fn dispatch_tool(
                     recovery_for("programs_foreach", "tool required"),
                 );
             }
-            if tool_name == "programs_foreach" || tool_name == "batch" || tool_name == "firmware_summarize" {
+            if tool_name == "programs_foreach"
+                || tool_name == "batch"
+                || tool_name == "firmware_summarize"
+            {
                 return tool_error(
                     id,
                     "programs_foreach",
@@ -1568,17 +1996,15 @@ fn dispatch_tool(
                         .list_programs()
                         .ok()
                         .and_then(|v| {
-                            v.get("programs")
-                                .and_then(|p| p.as_array())
-                                .map(|a| {
-                                    a.iter()
-                                        .filter_map(|x| {
-                                            x.get("name")
-                                                .and_then(|n| n.as_str())
-                                                .map(|s| s.to_string())
-                                        })
-                                        .collect()
-                                })
+                            v.get("programs").and_then(|p| p.as_array()).map(|a| {
+                                a.iter()
+                                    .filter_map(|x| {
+                                        x.get("name")
+                                            .and_then(|n| n.as_str())
+                                            .map(|s| s.to_string())
+                                    })
+                                    .collect()
+                            })
                         })
                         .unwrap_or_default(),
                     Err(_) => vec![],
@@ -1672,18 +2098,36 @@ fn dispatch_tool(
             let tname = args.get("name").and_then(|v| v.as_str()).unwrap_or("mcp");
             let n = tname.to_string();
             bridge_tool(
-                id, "transaction_begin", cached_client, default_project, default_program, projects_dir, true,
+                id,
+                "transaction_begin",
+                cached_client,
+                default_project,
+                default_program,
+                projects_dir,
+                true,
                 move |client| client.send_command("transaction_begin", Some(json!({"name": n}))),
                 None,
             )
         }
         "transaction_commit" => bridge_tool(
-            id, "transaction_commit", cached_client, default_project, default_program, projects_dir, true,
+            id,
+            "transaction_commit",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            true,
             |client| client.send_command("transaction_commit", None),
             None,
         ),
         "transaction_abort" => bridge_tool(
-            id, "transaction_abort", cached_client, default_project, default_program, projects_dir, true,
+            id,
+            "transaction_abort",
+            cached_client,
+            default_project,
+            default_program,
+            projects_dir,
+            true,
             |client| client.send_command("transaction_abort", None),
             None,
         ),
@@ -1726,9 +2170,12 @@ fn normalize_type_mutation_args(command: &str, args: &Value) -> Value {
                     obj.insert("field_type".into(), v);
                 }
             }
-            let missing = ["type_name", "field_name", "field_type"]
-                .iter()
-                .any(|k| obj.get(*k).and_then(|v| v.as_str()).unwrap_or("").is_empty());
+            let missing = ["type_name", "field_name", "field_type"].iter().any(|k| {
+                obj.get(*k)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .is_empty()
+            });
             if missing {
                 return json!({"__error": "type_name, field_name, and field_type required"});
             }
@@ -1744,9 +2191,12 @@ fn normalize_type_mutation_args(command: &str, args: &Value) -> Value {
                     obj.insert("field_name".into(), v);
                 }
             }
-            let missing = ["type_name", "field_name"]
-                .iter()
-                .any(|k| obj.get(*k).and_then(|v| v.as_str()).unwrap_or("").is_empty());
+            let missing = ["type_name", "field_name"].iter().any(|k| {
+                obj.get(*k)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .is_empty()
+            });
             if missing {
                 return json!({"__error": "type_name and field_name required"});
             }
@@ -1757,9 +2207,12 @@ fn normalize_type_mutation_args(command: &str, args: &Value) -> Value {
                     obj.insert("base_type".into(), v);
                 }
             }
-            let missing = ["name", "base_type"]
-                .iter()
-                .any(|k| obj.get(*k).and_then(|v| v.as_str()).unwrap_or("").is_empty());
+            let missing = ["name", "base_type"].iter().any(|k| {
+                obj.get(*k)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .is_empty()
+            });
             if missing {
                 return json!({"__error": "name and base_type required"});
             }
@@ -1772,25 +2225,19 @@ fn normalize_type_mutation_args(command: &str, args: &Value) -> Value {
                     .filter_map(|(k, v)| {
                         let n = if let Some(i) = v.as_i64() {
                             i.to_string()
-                        } else if let Some(s) = v.as_str() {
-                            s.to_string()
                         } else {
-                            return None;
+                            v.as_str()?.to_string()
                         };
                         Some(format!("{}={}", k, n))
                     })
                     .collect();
                 obj.insert("values".into(), json!(pairs.join(",")));
             }
-            let missing = ["name", "values"]
-                .iter()
-                .any(|k| {
-                    match obj.get(*k) {
-                        Some(Value::String(s)) => s.is_empty(),
-                        Some(_) => false,
-                        None => true,
-                    }
-                });
+            let missing = ["name", "values"].iter().any(|k| match obj.get(*k) {
+                Some(Value::String(s)) => s.is_empty(),
+                Some(_) => false,
+                None => true,
+            });
             if missing {
                 return json!({"__error": "name and values required (string KEY=VALUE,... or object)"});
             }
@@ -1817,6 +2264,7 @@ where
     f(id, v)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn bridge_tool<F>(
     id: Option<Value>,
     command: &str,
@@ -1887,7 +2335,7 @@ fn enrich_decompile(
     max_xrefs: usize,
     caller_depth: usize,
 ) -> anyhow::Result<Value> {
-    let mut base = client.decompile(target.to_string(), false, false)?;
+    let mut base = client.decompile(target.to_string(), false, false, None)?;
     let addr = base
         .get("address")
         .and_then(|a| a.as_str())
@@ -1988,7 +2436,11 @@ pub fn assemble_summarize_report(focus: &str, sections: Map<String, Value>) -> V
     let mut findings = Vec::new();
 
     if let Some(info) = sections.get("program") {
-        if let Some(name) = info.get("name").or(info.get("program")).and_then(|v| v.as_str()) {
+        if let Some(name) = info
+            .get("name")
+            .or(info.get("program"))
+            .and_then(|v| v.as_str())
+        {
             findings.push(json!({
                 "kind": "program",
                 "summary": format!("program {}", name),
@@ -2001,7 +2453,11 @@ pub fn assemble_summarize_report(focus: &str, sections: Map<String, Value>) -> V
             .get("imports")
             .and_then(|v| v.as_array())
             .map(|a| a.len())
-            .or_else(|| imps.get("count").and_then(|c| c.as_u64()).map(|n| n as usize))
+            .or_else(|| {
+                imps.get("count")
+                    .and_then(|c| c.as_u64())
+                    .map(|n| n as usize)
+            })
             .unwrap_or(0);
         findings.push(json!({
             "kind": "imports",
@@ -2070,21 +2526,8 @@ fn get_bridge_client(
     program: Option<String>,
     projects_dir: Option<PathBuf>,
 ) -> anyhow::Result<(BridgeClient, String)> {
-    if let Some((ref name, ref client)) = *cached {
-        if let Some(p) = &project {
-            if name == p {
-                return Ok((client.clone(), name.clone()));
-            }
-        } else {
-            return Ok((client.clone(), name.clone()));
-        }
-    }
-
-    let mut config = Config::load()?;
-    if let Some(pd) = projects_dir {
-        std::env::set_var("GHIDRA_CLI_PROJECTS_DIR", pd.to_string_lossy().to_string());
-        config = Config::load()?;
-    }
+    let config = crate::load_config(&projects_dir)?;
+    let program = program.or_else(|| crate::default_program_for(project.as_deref(), &config));
 
     let project_name = project
         .clone()
@@ -2098,15 +2541,19 @@ fn get_bridge_client(
         base.join(&project_name)
     };
 
-    let port = bridge::is_bridge_running(&project_path).ok_or_else(|| {
-        anyhow::anyhow!("No bridge running for project: {}", project_path.display())
-    })?;
-
-    let client = BridgeClient::new(port);
-
-    if let Some(prog) = program.clone().or_else(|| config.get_default_program()) {
-        let _ = client.open_program(&prog);
+    let mut client = match cached.as_ref() {
+        Some((name, client)) if name == &project_name => client.clone(),
+        _ => {
+            let port = bridge::is_bridge_running(&project_path).ok_or_else(|| {
+                anyhow::anyhow!("No bridge running for project: {}", project_path.display())
+            })?;
+            BridgeClient::new(port)
+        }
+    };
+    if let Some(prog) = &program {
+        crate::ensure_program_open(&client, prog)?;
     }
+    client.set_expected_program(program);
 
     cached.replace((project_name.clone(), client.clone()));
     Ok((client, project_name))
@@ -2260,21 +2707,26 @@ pub fn make_error_envelope(command: &str, message: &str, recovery: Vec<String>) 
         "next_steps": [],
         "recovery_suggestions": recovery,
         "artifacts": []
-    }).as_object().map(|m| {
+    })
+    .as_object()
+    .map(|m| {
         let mut o = m.clone();
         o.insert("provenance".into(), full_provenance(None, None));
         // ensure timestamp is now (full_provenance already has it)
         let _ = now;
         Value::Object(o)
-    }).unwrap_or_else(|| json!({
-        "status": "error",
-        "command": command,
-        "message": message,
-        "provenance": { "tool_version": env!("CARGO_PKG_VERSION"), "timestamp": now },
-        "next_steps": [],
-        "recovery_suggestions": recovery,
-        "artifacts": []
-    }))
+    })
+    .unwrap_or_else(|| {
+        json!({
+            "status": "error",
+            "command": command,
+            "message": message,
+            "provenance": { "tool_version": env!("CARGO_PKG_VERSION"), "timestamp": now },
+            "next_steps": [],
+            "recovery_suggestions": recovery,
+            "artifacts": []
+        })
+    })
 }
 
 fn make_ping_envelope() -> Value {
@@ -2330,7 +2782,10 @@ pub fn make_envelope(
         {
             obj.insert("binary_sha256".into(), h.clone());
         }
-        if let Some(v) = data.get("ghidra_version").or(data.pointer("/program/ghidra_version")) {
+        if let Some(v) = data
+            .get("ghidra_version")
+            .or(data.pointer("/program/ghidra_version"))
+        {
             obj.insert("ghidra_version".into(), v.clone());
         }
     }
@@ -2351,7 +2806,9 @@ pub fn recovery_for(command: &str, message: &str) -> Vec<String> {
     let mut out = Vec::new();
 
     if m.contains("no bridge") || m.contains("not running") || m.contains("connection refused") {
-        out.push("Start the bridge: `ghidra start --project <name>` (or import/analyze first).".into());
+        out.push(
+            "Start the bridge: `ghidra start --project <name>` (or import/analyze first).".into(),
+        );
         out.push("Check `ghidra status --project <name>` and `ghidra doctor`.".into());
     }
     if m.contains("conflict") || m.contains("locked") || m.contains("busy") {
@@ -2359,21 +2816,34 @@ pub fn recovery_for(command: &str, message: &str) -> Vec<String> {
         out.push("Reopen the program in a fresh process and re-verify the invariant.".into());
     }
     if m.contains("verif") || m.contains("expect") || m.contains("artifact") {
-        out.push("Inspect declared artifacts and paths; use allow_empty only when empty is valid.".into());
-        out.push("Re-run with expect and confirm binary_sha256 / row counts in the manifest.".into());
+        out.push(
+            "Inspect declared artifacts and paths; use allow_empty only when empty is valid."
+                .into(),
+        );
+        out.push(
+            "Re-run with expect and confirm binary_sha256 / row counts in the manifest.".into(),
+        );
     }
     if m.contains("transaction") || m.contains("undo") {
-        out.push("Call transaction_abort to roll back, or transaction_commit if partial work is good.".into());
+        out.push(
+            "Call transaction_abort to roll back, or transaction_commit if partial work is good."
+                .into(),
+        );
         out.push("Check the bridge transaction log if present in status.".into());
     }
     if m.contains("not found") || m.contains("unknown") {
-        out.push(format!("Confirm the target exists via a list/get tool before retrying {}.", command));
+        out.push(format!(
+            "Confirm the target exists via a list/get tool before retrying {}.",
+            command
+        ));
     }
     if m.contains("required") || m.contains("missing") {
         out.push("Check the tool inputSchema from tools/list and supply required fields.".into());
     }
     if out.is_empty() {
-        out.push("Retry after confirming project/program context and bridge health (`ping`).".into());
+        out.push(
+            "Retry after confirming project/program context and bridge health (`ping`).".into(),
+        );
         out.push("If the failure persists, reopen in a fresh process and re-verify.".into());
     }
     out
@@ -2492,7 +2962,9 @@ fn compute_next_steps(command: &str, target: Option<&str>) -> Vec<String> {
             "decompile high-confidence findings per program".into(),
             "diff_programs between related builds".into(),
         ],
-        "transaction_begin" => vec!["run mutations, then transaction_commit or transaction_abort".into()],
+        "transaction_begin" => {
+            vec!["run mutations, then transaction_commit or transaction_abort".into()]
+        }
         "transaction_commit" | "transaction_abort" => {
             vec!["verify state with decompile/list tools".into()]
         }
@@ -2557,7 +3029,12 @@ fn handle_http_connection(
             .unwrap_or("");
         let ok = auth == format!("Bearer {}", expected) || auth == expected;
         if !ok {
-            write_http_response(&mut stream, 401, "application/json", br#"{"error":"unauthorized"}"#)?;
+            write_http_response(
+                &mut stream,
+                401,
+                "application/json",
+                br#"{"error":"unauthorized"}"#,
+            )?;
             return Ok(());
         }
     }
@@ -2661,7 +3138,9 @@ fn handle_http_connection(
                             sse_progress_frame(None, 40, &format!("bridge:{}", msg)).as_bytes(),
                         )?;
                     } else {
-                        stream.write_all(sse_progress_frame(None, 40, "bridge_connected").as_bytes())?;
+                        stream.write_all(
+                            sse_progress_frame(None, 40, "bridge_connected").as_bytes(),
+                        )?;
                     }
                     stream.flush()?;
                 } else {
@@ -2843,7 +3322,11 @@ mod tests {
             "graph_callers",
             "graph_callees",
         ] {
-            assert!(names.contains(&expected), "missing tool in list: {}", expected);
+            assert!(
+                names.contains(&expected),
+                "missing tool in list: {}",
+                expected
+            );
         }
     }
 
@@ -2943,8 +3426,13 @@ mod tests {
         );
         assert_eq!(env["status"], "error");
         assert_eq!(env["command"], "patch_bytes");
-        let recovery = env["recovery_suggestions"].as_array().expect("recovery array");
-        assert!(!recovery.is_empty(), "recovery_suggestions must be non-empty");
+        let recovery = env["recovery_suggestions"]
+            .as_array()
+            .expect("recovery array");
+        assert!(
+            !recovery.is_empty(),
+            "recovery_suggestions must be non-empty"
+        );
         let prov = &env["provenance"];
         assert!(prov.get("tool_version").is_some());
         assert!(prov.get("timestamp").is_some());
@@ -2995,7 +3483,9 @@ mod tests {
         assert_eq!(caps["cli_version"], env!("CARGO_PKG_VERSION"));
         assert!(caps["features"]["mutations"].as_bool().unwrap());
         assert!(caps["features"]["job_queue"].as_bool().unwrap());
-        assert!(caps["features"]["decompile_extra_context"].as_bool().unwrap());
+        assert!(caps["features"]["decompile_extra_context"]
+            .as_bool()
+            .unwrap());
         assert!(caps["transports"].as_array().unwrap().len() >= 2);
     }
 
@@ -3027,7 +3517,51 @@ mod tests {
         assert_eq!(results[0]["status"], "success");
         assert_eq!(results[0]["name"], "ping");
         assert_eq!(results[1]["status"], "error");
-        assert!(results[1]["envelope"]["recovery_suggestions"].as_array().unwrap().len() > 0);
+        assert!(
+            results[1]["envelope"]["recovery_suggestions"]
+                .as_array()
+                .unwrap()
+                .len()
+                > 0
+        );
+    }
+
+    #[test]
+    fn cached_bridge_selects_and_guards_the_requested_program() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            for command in ["bridge_info", "open_program", "program_info"] {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut line = String::new();
+                BufReader::new(&stream).read_line(&mut line).unwrap();
+                let request: Value = serde_json::from_str(&line).unwrap();
+                assert_eq!(request["command"], command);
+                if command == "program_info" {
+                    assert_eq!(request["expect_program"], "selected");
+                }
+                let data = if command == "bridge_info" {
+                    json!({"has_current_program":true,"current_program":"other"})
+                } else {
+                    json!({"name":"selected"})
+                };
+                writeln!(stream, "{}", json!({"status":"success","data":data})).unwrap();
+            }
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let mut cached = Some(("cache-test".to_string(), BridgeClient::new(port)));
+        let (client, _) = get_bridge_client(
+            &mut cached,
+            Some("cache-test".to_string()),
+            Some("selected".to_string()),
+            Some(dir.path().to_path_buf()),
+        )
+        .unwrap();
+        client.program_info().unwrap();
+        server.join().unwrap();
     }
 
     #[test]
@@ -3077,14 +3611,15 @@ mod tests {
 
         // The above is racy because we dropped the port. Instead test handler in-process:
         let _ = handle; // abandon racy test path
-        // In-process: bind real server on 0 and POST
+                        // In-process: bind real server on 0 and POST
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         drop(listener);
 
         let listen_str = format!("{}", addr);
         // Use a dedicated port by binding inside thread with port 0 and writing to a file
-        let port_file = std::env::temp_dir().join(format!("ghidra-mcp-test-port-{}", std::process::id()));
+        let port_file =
+            std::env::temp_dir().join(format!("ghidra-mcp-test-port-{}", std::process::id()));
         let port_file2 = port_file.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let stop2 = stop.clone();
@@ -3239,7 +3774,11 @@ mod tests {
         assert!(kinds.contains(&"crypto"));
         for f in findings {
             let conf = f["confidence"].as_f64().expect("confidence number");
-            assert!((0.0..=1.0).contains(&conf), "confidence out of range: {}", conf);
+            assert!(
+                (0.0..=1.0).contains(&conf),
+                "confidence out of range: {}",
+                conf
+            );
         }
         // crypto with hits should be higher confidence than empty
         let crypto = findings.iter().find(|f| f["kind"] == "crypto").unwrap();
@@ -3278,10 +3817,8 @@ mod tests {
 
         assert!(wants_sse_stream("/mcp?stream=1", None));
 
-        let port_file = std::env::temp_dir().join(format!(
-            "ghidra-mcp-sse-port-{}",
-            std::process::id()
-        ));
+        let port_file =
+            std::env::temp_dir().join(format!("ghidra-mcp-sse-port-{}", std::process::id()));
         let port_file2 = port_file.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let stop2 = stop.clone();
@@ -3345,13 +3882,26 @@ mod tests {
             "streaming SSE should not set Content-Length; resp headers={}",
             resp.lines().take(8).collect::<Vec<_>>().join(" | ")
         );
-        assert!(!resp.contains("Access-Control-Allow-Origin: *"), "CORS * removed");
+        assert!(
+            !resp.contains("Access-Control-Allow-Origin: *"),
+            "CORS * removed"
+        );
         assert!(resp.contains("event: progress"), "resp={}", resp);
         assert!(resp.contains("event: result"), "resp={}", resp);
-        assert!(resp.contains("mcp_progress") || resp.contains("percent"), "resp={}", resp);
-        assert!(resp.contains("pong") || resp.contains("success"), "resp={}", resp);
         assert!(
-            resp.contains("provenance") || resp.contains("tool_version") || resp.contains("next_steps"),
+            resp.contains("mcp_progress") || resp.contains("percent"),
+            "resp={}",
+            resp
+        );
+        assert!(
+            resp.contains("pong") || resp.contains("success"),
+            "resp={}",
+            resp
+        );
+        assert!(
+            resp.contains("provenance")
+                || resp.contains("tool_version")
+                || resp.contains("next_steps"),
             "resp={}",
             resp
         );
@@ -3385,10 +3935,8 @@ mod tests {
         assert_eq!(add["field_name"], "f");
         assert_eq!(add["field_type"], "int");
 
-        let td = normalize_type_mutation_args(
-            "type_typedef",
-            &json!({"name": "MyInt", "base": "int"}),
-        );
+        let td =
+            normalize_type_mutation_args("type_typedef", &json!({"name": "MyInt", "base": "int"}));
         assert_eq!(td["base_type"], "int");
 
         let en = normalize_type_mutation_args(
@@ -3410,7 +3958,9 @@ mod tests {
         };
         let props = |n: &str| find(n)["inputSchema"]["properties"].clone();
         assert!(props("delete_function").get("address").is_some());
-        assert!(props("function_set_return_type").get("return_type").is_some());
+        assert!(props("function_set_return_type")
+            .get("return_type")
+            .is_some());
         assert!(props("set_var_type").get("var_name").is_some());
         assert!(props("type_add_field").get("type_name").is_some());
         assert!(props("type_typedef").get("base_type").is_some());
@@ -3471,10 +4021,13 @@ mod tests {
         // Actually return owned via thread-local pattern — use String and map in callers
         // Simpler: reimplement as Vec<String> and adjust tests... keep helper returning Vec<String>
         let _ = defs;
-        tool_names_owned().iter().map(|s| {
-            // cannot return &str from owned easily without leak:
-            Box::leak(s.clone().into_boxed_str()) as &'static str
-        }).collect()
+        tool_names_owned()
+            .iter()
+            .map(|s| {
+                // cannot return &str from owned easily without leak:
+                Box::leak(s.clone().into_boxed_str()) as &'static str
+            })
+            .collect()
     }
 
     fn tool_names_owned() -> Vec<String> {
@@ -3482,7 +4035,11 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .filter_map(|t| t.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+            .filter_map(|t| {
+                t.get("name")
+                    .and_then(|n| n.as_str())
+                    .map(|s| s.to_string())
+            })
             .collect()
     }
 }

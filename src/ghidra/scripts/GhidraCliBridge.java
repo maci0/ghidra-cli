@@ -175,7 +175,8 @@ public class GhidraCliBridge extends GhidraScript {
         "diff_programs", "diff_functions",
         "patch_bytes", "patch_nop", "patch_export",
         "disasm", "stats", "script_run", "script_java", "script_python",
-        "script_list", "batch", "read_memory"));
+        "script_list", "batch", "read_memory",
+        "data_flow", "pcode", "structure_recover", "transaction_abort", "transaction_begin", "transaction_commit", "transfer_analysis"));
 
     private final ReentrantReadWriteLock programLock = new ReentrantReadWriteLock(true);
     private final Object readLaneLock = new Object();
