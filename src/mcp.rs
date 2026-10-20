@@ -740,7 +740,8 @@ fn dispatch_tool(
                     let canon_path = std::fs::canonicalize(&path_owned)
                         .map(|p| p.to_string_lossy().into_owned())
                         .unwrap_or_else(|_| path_owned.clone());
-                    match client.script_run(&canon_path, &script_args, &expect, allow_empty) {
+                    match client.script_run(&canon_path, &script_args, &expect, allow_empty, false)
+                    {
                         Ok(data) => {
                             let ns = compute_next_steps("script_run", Some(&path_owned));
                             let env = envelope_with_script_artifacts(
