@@ -507,6 +507,10 @@ pub fn start_bridge(
         .arg(port_file.to_str().unwrap());
 
     apply_java_home(&mut cmd, ghidra_install_dir);
+    // Set working directory to app data dir so Ghidra's temp/compiled files
+    // (e.g. compiled Java script classes) don't pollute the user's CWD
+    let data_dir = get_data_dir()?;
+    cmd.current_dir(&data_dir);
 
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
