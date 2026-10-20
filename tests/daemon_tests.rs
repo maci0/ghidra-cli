@@ -23,6 +23,64 @@ fn start_daemon() -> DaemonTestHarness {
 
 #[test]
 #[serial]
+fn test_bridge_launch_preserves_relative_paths() {
+    require_ghidra!();
+    ensure_test_project(TEST_PROJECT, TEST_PROGRAM);
+    let config = ghidra_cli::config::Config::load().unwrap();
+    let install = dunce::canonicalize(config.get_ghidra_install_dir().unwrap()).unwrap();
+    let projects = dunce::canonicalize(config.get_project_dir().unwrap()).unwrap();
+    let java = ghidra_cli::ghidra::java::resolve_for_ghidra(&install, config.get_java_home())
+        .unwrap()
+        .home;
+    let java = dunce::canonicalize(java).unwrap();
+    let _ = assert_cmd::cargo::cargo_bin_cmd!("ghidra")
+        .args(["--project", TEST_PROJECT, "stop"])
+        .output();
+
+    for (cwd, install_arg, projects_arg, java_arg) in [
+        (
+            install.parent().unwrap(),
+            std::path::Path::new(install.file_name().unwrap()),
+            projects.as_path(),
+            java.as_path(),
+        ),
+        (
+            projects.parent().unwrap(),
+            install.as_path(),
+            std::path::Path::new(projects.file_name().unwrap()),
+            java.as_path(),
+        ),
+        (
+            java.parent().unwrap(),
+            install.as_path(),
+            projects.as_path(),
+            std::path::Path::new(java.file_name().unwrap()),
+        ),
+    ] {
+        for command in ["start", "ping", "stop"] {
+            assert_cmd::cargo::cargo_bin_cmd!("ghidra")
+                .current_dir(cwd)
+                .env("GHIDRA_INSTALL_DIR", install_arg)
+                .env("GHIDRA_CLI_JAVA_HOME", java_arg)
+                .env_remove("GHIDRA_PROJECT_DIR")
+                .arg("--projects-dir")
+                .arg(projects_arg)
+                .args([
+                    "--project",
+                    TEST_PROJECT,
+                    "--program",
+                    TEST_PROGRAM,
+                    command,
+                ])
+                .timeout(Duration::from_secs(180))
+                .assert()
+                .success();
+        }
+    }
+}
+
+#[test]
+#[serial]
 fn test_daemon_start() {
     require_ghidra!();
 

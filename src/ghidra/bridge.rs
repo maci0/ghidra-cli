@@ -298,7 +298,10 @@ fn apply_java_home(cmd: &mut Command, ghidra_install_dir: &Path) {
                 jdk.home.display(),
                 jdk.source
             );
-            cmd.env("JAVA_HOME", &jdk.home);
+            cmd.env(
+                "JAVA_HOME",
+                dunce::canonicalize(&jdk.home).unwrap_or(jdk.home),
+            );
         }
         Err(e) => {
             warn!(
@@ -471,7 +474,7 @@ pub fn start_bridge(
     let mut cmd = Command::new(&headless_script);
 
     // analyzeHeadless expects: <parent_directory> <project_name>
-    let ghidra_project_dir = project_path.parent().unwrap_or(project_path);
+    let ghidra_project_dir = dunce::canonicalize(project_path.parent().unwrap_or(project_path))?;
     let ghidra_project_name = project_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -995,7 +998,7 @@ pub fn find_headless_script(ghidra_install_dir: &Path) -> Result<PathBuf> {
     let script_path = support_dir.join(script_name);
 
     if script_path.exists() {
-        Ok(script_path)
+        Ok(dunce::canonicalize(script_path)?)
     } else {
         anyhow::bail!("analyzeHeadless not found at: {}", support_dir.display())
     }

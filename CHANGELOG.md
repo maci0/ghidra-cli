@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep native MCP tools available with the protocol-3 bridge allowlist and
   updated decompile client signature.
 - Run the persistent bridge from its data directory so generated files do not
-  pollute the caller's working directory.
+  pollute the caller's working directory, while preserving relative install,
+  JDK, and project paths.
 - Align release tests with the CI-pinned Ghidra version, run binary and tag
   tests, and use curated release notes.
 
