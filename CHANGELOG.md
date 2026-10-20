@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Use stored program names for selection and request guards, including
+  duplicate imports with suffixes such as `sample_binary.0`.
 - Keep native MCP tools available with the protocol-3 bridge allowlist and
   updated decompile client signature.
 - Run the persistent bridge from its data directory so generated files do not

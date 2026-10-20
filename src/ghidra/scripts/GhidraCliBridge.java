@@ -748,14 +748,14 @@ public class GhidraCliBridge extends GhidraScript {
         try {
             if (job.expectProgram != null && !job.expectProgram.isEmpty()
                     && (currentProgram == null
-                        || !job.expectProgram.equals(currentProgram.getName()))) {
+                        || !job.expectProgram.equals(programDomainName(currentProgram)))) {
                 JsonObject mismatch = errorResult(
                     "Program mismatch: the request expects '" + job.expectProgram
                     + "' but the bridge's current program is "
-                    + (currentProgram == null ? "none" : "'" + currentProgram.getName() + "'")
+                    + (currentProgram == null ? "none" : "'" + programDomainName(currentProgram) + "'")
                     + " (another client switched programs)", "program_mismatch");
                 mismatch.addProperty("current_program",
-                    currentProgram == null ? null : currentProgram.getName());
+                    currentProgram == null ? null : programDomainName(currentProgram));
                 result = new HandleResult(errorResponse(mismatch), false);
             } else {
                 result = executeProgramRequest(record.command, job.args);
@@ -1913,9 +1913,15 @@ public class GhidraCliBridge extends GhidraScript {
         }
     }
 
+    private String programDomainName(Program program) {
+        if (program == null) return null;
+        DomainFile file = program.getDomainFile();
+        return file == null ? program.getName() : file.getName();
+    }
+
     private void refreshBridgeSnapshot() {
         Program program = currentProgram;
-        currentProgramNameSnapshot = program == null ? null : program.getName();
+        currentProgramNameSnapshot = programDomainName(program);
 
         Project project = state == null ? null : state.getProject();
         projectNameSnapshot = project == null ? null : project.getName();
@@ -1937,7 +1943,7 @@ public class GhidraCliBridge extends GhidraScript {
         }
 
         JsonObject result = new JsonObject();
-        result.addProperty("name", currentProgram.getName());
+        result.addProperty("name", programDomainName(currentProgram));
         result.addProperty("executable_path", currentProgram.getExecutablePath());
         result.addProperty("executable_format", currentProgram.getExecutableFormat());
         String compiler = currentProgram.getCompiler();
@@ -2856,7 +2862,7 @@ public class GhidraCliBridge extends GhidraScript {
             if (currentProgram == null) {
                 return errorResult("No program loaded. Use 'open_program' or 'import' first.");
             }
-            programName = currentProgram.getName();
+            programName = programDomainName(currentProgram);
         }
 
         if (currentProgram == null) {
@@ -2864,7 +2870,7 @@ public class GhidraCliBridge extends GhidraScript {
         }
 
         // If requested program differs from current, switch to it
-        if (!currentProgram.getName().equals(programName)) {
+        if (!programDomainName(currentProgram).equals(programName)) {
             JsonObject switchArgs = new JsonObject();
             switchArgs.addProperty("program", programName);
             JsonObject switchResult = handleOpenProgram(switchArgs);
@@ -2913,7 +2919,7 @@ public class GhidraCliBridge extends GhidraScript {
 
             for (DomainFile domainFile : rootFolder.getFiles()) {
                 boolean isCurrent = (currentProgram != null &&
-                    domainFile.getName().equals(currentProgram.getName()));
+                    domainFile.getName().equals(programDomainName(currentProgram)));
 
                 JsonObject prog = new JsonObject();
                 prog.addProperty("name", domainFile.getName());
@@ -2961,7 +2967,7 @@ public class GhidraCliBridge extends GhidraScript {
             result.addProperty("count", programs.size());
             result.addProperty("has_current_program", currentProgram != null);
             if (currentProgram != null) {
-                result.addProperty("current_program_name", currentProgram.getName());
+                result.addProperty("current_program_name", programDomainName(currentProgram));
             }
             return result;
 
@@ -2977,7 +2983,7 @@ public class GhidraCliBridge extends GhidraScript {
         }
 
         // Already the current program? No-op.
-        if (currentProgram != null && currentProgram.getName().equals(programName)) {
+        if (currentProgram != null && programDomainName(currentProgram).equals(programName)) {
             JsonObject result = new JsonObject();
             result.addProperty("status", "success");
             result.addProperty("program", programName);
@@ -3055,7 +3061,7 @@ public class GhidraCliBridge extends GhidraScript {
 
             JsonObject result = new JsonObject();
             result.addProperty("status", "success");
-            result.addProperty("program", currentProgram.getName());
+            result.addProperty("program", programDomainName(currentProgram));
             if (explicitTransactionId < 0) {
                 result.addProperty("transaction_cleared", true);
             }
@@ -3071,7 +3077,7 @@ public class GhidraCliBridge extends GhidraScript {
             return errorResult("No program loaded");
         }
 
-        String programName = currentProgram.getName();
+        String programName = programDomainName(currentProgram);
 
         // In headless mode, we release the program
         try {
@@ -5328,7 +5334,7 @@ public class GhidraCliBridge extends GhidraScript {
         }
         if (domainFile == null) return null;
         // Reuse current program instance if it is already the requested one.
-        if (currentProgram != null && currentProgram.getName().equals(programName)) {
+        if (currentProgram != null && programDomainName(currentProgram).equals(programName)) {
             return currentProgram;
         }
         DomainObject domObj = domainFile.getDomainObject(consumer, true, false, monitor);
@@ -6131,7 +6137,7 @@ public class GhidraCliBridge extends GhidraScript {
             stats.addProperty("sections", sectionCount);
             stats.addProperty("data_types", dataTypeCount);
             stats.addProperty("instructions", instructionCount);
-            stats.addProperty("program_name", currentProgram.getName());
+            stats.addProperty("program_name", programDomainName(currentProgram));
             stats.addProperty("executable_format", currentProgram.getExecutableFormat());
             String compiler = currentProgram.getCompiler();
             stats.addProperty("compiler", (compiler != null && !compiler.isEmpty()) ? compiler : "Unknown");
@@ -6382,7 +6388,7 @@ public class GhidraCliBridge extends GhidraScript {
         }
         String message = "read-only script modified the program: " + scriptFile.getName()
             + " ran with --read-only but the modification number of "
-            + currentProgram.getName() + " changed from " + before + " to " + after
+            + programDomainName(currentProgram) + " changed from " + before + " to " + after
             + ". Run it without --read-only so it gets exclusive access.";
         printerr("READ-ONLY VIOLATION: " + message);
         JsonObject err = errorResult(message, "read_only_violation");
@@ -6470,7 +6476,7 @@ public class GhidraCliBridge extends GhidraScript {
             m.addProperty("manifest_error", e.getMessage());
         }
         if (currentProgram != null) {
-            m.addProperty("program", currentProgram.getName());
+            m.addProperty("program", programDomainName(currentProgram));
             String binSha = currentProgram.getExecutableSHA256();
             if (binSha != null && !binSha.isEmpty()) m.addProperty("binary_sha256", binSha);
             m.addProperty("executable_format", currentProgram.getExecutableFormat());
