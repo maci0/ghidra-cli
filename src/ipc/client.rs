@@ -235,6 +235,15 @@ fn describe_queue_summary(status: &serde_json::Value) -> String {
     text
 }
 
+fn client_path(path: &str) -> std::io::Result<std::path::PathBuf> {
+    // Keep empty paths for bridge validation and optional-output behavior.
+    if path.is_empty() {
+        Ok(std::path::PathBuf::new())
+    } else {
+        std::path::absolute(path)
+    }
+}
+
 /// Client for communicating with the Ghidra Java bridge.
 #[derive(Clone)]
 pub struct BridgeClient {
@@ -557,6 +566,7 @@ impl BridgeClient {
         binary_path: &str,
         program: Option<&str>,
     ) -> Result<serde_json::Value> {
+        let binary_path = client_path(binary_path)?;
         self.send_command_with_timeout(
             "import",
             Some(json!({"binary_path": binary_path, "program": program})),
@@ -762,6 +772,7 @@ impl BridgeClient {
     }
 
     pub fn patch_export(&self, output: &str) -> Result<serde_json::Value> {
+        let output = client_path(output)?;
         self.send_command("patch_export", Some(json!({"output": output})))
     }
 
@@ -804,12 +815,20 @@ impl BridgeClient {
         allow_empty: bool,
         read_only: bool,
     ) -> Result<serde_json::Value> {
+        let script_path = client_path(script_path)?;
+        let mut expect = expect.to_vec();
+        for artifact in &mut expect {
+            if let Some(path) = artifact.get("path").and_then(|p| p.as_str()) {
+                let path = client_path(path)?;
+                artifact["path"] = json!(path);
+            }
+        }
         let mut payload = json!({"path": script_path, "args": args});
         if read_only {
             payload["read_only"] = json!(true);
         }
         if !expect.is_empty() {
-            payload["expect"] = serde_json::Value::Array(expect.to_vec());
+            payload["expect"] = serde_json::Value::Array(expect);
             payload["allow_empty"] = json!(allow_empty);
         }
         self.send_command("script_run", Some(payload))
@@ -836,6 +855,7 @@ impl BridgeClient {
     }
 
     pub fn program_export(&self, format: &str, output: Option<&str>) -> Result<serde_json::Value> {
+        let output = output.map(client_path).transpose()?;
         self.send_command(
             "program_export",
             Some(json!({"format": format, "output": output})),
@@ -851,6 +871,79 @@ mod tests {
     };
     use std::io::{Error, ErrorKind};
     use std::time::Duration;
+
+    #[test]
+    fn filesystem_requests_resolve_paths_in_the_client_directory() {
+        use std::io::{BufRead, BufReader, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let mut requests = Vec::new();
+            for _ in 0..7 {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut line = String::new();
+                BufReader::new(&stream).read_line(&mut line).unwrap();
+                requests.push(serde_json::from_str::<serde_json::Value>(&line).unwrap());
+                writeln!(
+                    stream,
+                    "{}",
+                    serde_json::json!({"status":"success","data":{}})
+                )
+                .unwrap();
+            }
+            requests
+        });
+        let client = super::BridgeClient::new(port);
+        client
+            .import_binary("Cargo.toml", Some("imported"))
+            .unwrap();
+        client.patch_export("patch.bin").unwrap();
+        client.program_export("json", Some("program.json")).unwrap();
+        let args = vec!["raw-relative-argument".to_string()];
+        let expect = vec![serde_json::json!({"path":"artifact.csv","min_rows":2})];
+        client
+            .script_run(
+                "tests/fixtures/scripts/EchoArgs.java",
+                &args,
+                &expect,
+                true,
+                false,
+            )
+            .unwrap();
+        client.program_export("json", None).unwrap();
+        client.program_export("json", Some("")).unwrap();
+        client.patch_export("").unwrap();
+        let requests = server.join().unwrap();
+        let cwd = std::env::current_dir().unwrap();
+        for (i, field, relative) in [
+            (0, "binary_path", "Cargo.toml"),
+            (1, "output", "patch.bin"),
+            (2, "output", "program.json"),
+            (3, "path", "tests/fixtures/scripts/EchoArgs.java"),
+        ] {
+            let path = std::path::Path::new(requests[i]["args"][field].as_str().unwrap());
+            assert!(
+                path.is_absolute(),
+                "{field} must be resolved before crossing into the JVM: {path:?}"
+            );
+            assert_eq!(path, cwd.join(relative));
+        }
+        assert_eq!(requests[0]["args"]["program"], "imported");
+        assert_eq!(requests[3]["args"]["args"], serde_json::json!(args));
+        assert_eq!(
+            requests[3]["args"]["expect"][0]["path"],
+            serde_json::json!(cwd.join("artifact.csv"))
+        );
+        assert_eq!(requests[3]["args"]["expect"][0]["min_rows"], 2);
+        assert_eq!(requests[3]["args"]["allow_empty"], true);
+        assert_eq!(expect[0]["path"], "artifact.csv");
+        assert!(requests[4]["args"]["output"].is_null());
+        assert_eq!(requests[5]["args"]["output"], "");
+        assert_eq!(requests[6]["args"]["output"], "");
+    }
 
     #[test]
     fn parse_secs_zero_means_no_timeout() {

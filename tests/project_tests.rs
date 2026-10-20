@@ -200,7 +200,7 @@ fn test_project_delete_nonexistent() {
 
 #[test]
 #[serial]
-fn test_import_existing_program() {
+fn test_import_existing_program_relative_path() {
     require_ghidra!();
 
     let project = unique_project_name("import-existing");
@@ -224,11 +224,12 @@ fn test_import_existing_program() {
     assert!(status.success(), "Import failed with status: {}", status);
 
     // Import again - should still succeed (idempotent or with new name)
+    let relative_binary = binary.strip_prefix(env!("CARGO_MANIFEST_DIR")).unwrap();
     let status = common::run_cli_with_timeout(
         ghidra_bin,
         &[
             "import",
-            binary.to_str().unwrap(),
+            relative_binary.to_str().unwrap(),
             "--project",
             &project,
             "--program",

@@ -6,7 +6,7 @@
 class GhidraCli < Formula
   desc "Rust CLI for Ghidra headless reverse engineering and native MCP tools"
   homepage "https://github.com/maci0/ghidra-cli"
-  url "https://github.com/maci0/ghidra-cli.git", tag: "v0.4.0"
+  url "https://github.com/maci0/ghidra-cli.git", tag: "v0.4.1"
   license "GPL-3.0-only"
   head "https://github.com/maci0/ghidra-cli.git", branch: "main"
 

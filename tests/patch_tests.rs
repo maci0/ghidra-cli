@@ -102,31 +102,25 @@ fn test_patch_nop_success() {
 /// Test exporting patched binary.
 #[test]
 #[serial]
-fn test_patch_export() {
+fn test_patch_export_relative_output() {
     require_ghidra!();
     let harness = harness();
-
-    // Use a unique output path to avoid conflicts
-    let output_path = format!("/tmp/ghidra-test-export-{}.bin", uuid::Uuid::new_v4());
-
+    let cwd = std::env::current_dir().unwrap();
+    let output_dir = tempfile::tempdir_in(&cwd).unwrap();
+    let output_path = output_dir.path().join("patched.bin");
+    let relative = output_path
+        .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+        .unwrap();
     let result = ghidra(harness)
         .arg("patch")
         .arg("export")
         .arg("--output")
-        .arg(&output_path)
+        .arg(relative.to_str().unwrap())
         .arg("--program")
         .arg(TEST_PROGRAM)
         .run();
-
-    // Export may fail in headless mode due to BinaryExporter limitations
-    // Just verify the command completes without hanging
-    assert!(
-        result.exit_code == 0 || !result.stderr.is_empty(),
-        "Should either succeed or provide an error message"
-    );
-
-    // Clean up
-    let _ = std::fs::remove_file(&output_path);
+    result.assert_success();
+    assert!(std::fs::metadata(&output_path).unwrap().len() > 0);
 }
 
 /// Test patching at function boundary (start of a function).

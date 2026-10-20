@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-10-21
+## [0.4.1] - 2026-10-21
 
 ### Fixed
 
+- Resolve import, export, script, and artifact paths in the client directory
+  before sending them to the bridge, independently of the JVM working directory.
 - Use stored program names for selection and request guards, including
   duplicate imports with suffixes such as `sample_binary.0`.
 - Keep native MCP tools available with the protocol-3 bridge allowlist and
@@ -75,6 +77,10 @@ Shared-bridge reliability fixes (docs/bugs 001, 002, 004–009). Bridge protocol
 - The config's `default_program` is only applied to the config's
   `default_project`; an explicit `--project` never auto-starts a bridge with
   another project's default program (bug 009).
+
+## [0.4.0] - 2026-10-21
+
+Tagged but unpublished; superseded by 0.4.1 before distribution.
 
 ## [0.3.0] - 2026-09-28
 
@@ -291,7 +297,8 @@ Shared-bridge reliability fixes (docs/bugs 001, 002, 004–009). Bridge protocol
   running bridge first so the project lock is released. `ghidra project info`
   likewise reports `Exists` based on those artifacts.
 
-[unreleased]: https://github.com/maci0/ghidra-cli/compare/v0.4.0...HEAD
+[unreleased]: https://github.com/maci0/ghidra-cli/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/maci0/ghidra-cli/compare/v0.3.0...v0.4.1
 [0.4.0]: https://github.com/maci0/ghidra-cli/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/maci0/ghidra-cli/releases/tag/v0.3.0
 [0.2.1]: https://github.com/akiselev/ghidra-cli/compare/v0.2.0...v0.2.1

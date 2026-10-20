@@ -1244,24 +1244,27 @@ fn test_program_info() {
 
 #[test]
 #[serial]
-fn test_program_export_json() {
+fn test_program_export_json_relative_output() {
     require_ghidra!();
     let harness = harness();
-
+    let cwd = std::env::current_dir().unwrap();
+    let output_dir = tempfile::tempdir_in(&cwd).unwrap();
+    let output_path = output_dir.path().join("program.json");
+    let relative = output_path
+        .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+        .unwrap();
     let result = ghidra(harness)
         .arg("program")
         .arg("export")
         .arg("json")
+        .arg("--output")
+        .arg(relative.to_str().unwrap())
         .with_project(TEST_PROJECT, TEST_PROGRAM)
         .run();
-
-    if result.exit_code == 0 {
-        assert!(
-            result.stdout.contains("functions") || !result.stdout.is_empty(),
-            "Export should produce output"
-        );
-    }
-    // Accept "Unknown command" gracefully
+    result.assert_success();
+    let data: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(output_path).unwrap()).unwrap();
+    assert!(data["functions"].is_array());
 }
 
 #[test]
